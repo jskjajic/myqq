@@ -1,0 +1,7 @@
+https://dev.mysql.com/downloads/file/?id=544662
+进入链接后，直接点击下方的  No thanks,just start my download.
+双击msi文件，所有配置默认即可（密码默认设置为123456）
+下载完成后，点击电脑的开始菜单找到并打开  MySQL  8.0  Command  Line  Client
+创建名为myqq_database的数据库，输入以下代码：CREATE DATABASE IF NOT EXISTS myqq_database  DEFAULT CHARACTER SET  utf8mb4 COLLATE utf8mb4_general_ci;
+创建名为myqq_admin的用户，输入以下代码： CREATE USER 'myqq_admin'@'localhost' IDENTIFIED BY '123456';GRANT ALL PRIVILEGES ON myqq_database.* TO 'myqq_admin'@'localhost';FLUSH PRIVILEGES;
+至此mysql数据库部分配置完毕
