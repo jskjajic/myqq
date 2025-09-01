@@ -8,10 +8,24 @@
 #include <mysql.h>
 #include<memory>
 #include<condition_variable>
+#include <commctrl.h> 
 #pragma comment (lib,"libmysql.lib")
 #include"resource.h"
 #pragma comment(lib,"ws2_32.lib")
 #pragma comment(lib,"gdiplus.lib")
+
+//µÇÂ¼Ê±¼ÓÔØĞÂµÇÂ¼ÓÃ»§µÄ¸öÈËĞÅÏ¢
+struct my_user_information
+{
+	std::string password;//limit 32
+	std::string nickname;//limit 32
+	std::string gender;//limit ÄĞ or Å®
+	std::string age;//limit 8
+	std::string signature;//limit 128
+};
+
+//·şÎñÆ÷³ÌĞòÍË³ö±êÖ¾//
+bool g_exitFlag = false;
 
 //¹ã²¥¿òÓÃ»§ÁĞ±í¸üĞÂ//
 std::mutex users_mutex;
@@ -27,6 +41,7 @@ HWND g_hInfoDialog = NULL;//¶Ô»°¿ò¾ä±ú//
 
 HWND g_hInfoDialogmonitor = NULL;//¼à¿Ø¿ò¾ä±ú//
 HWND g_hInfoDialogbroadcast = NULL;//¹ã²¥¿ò¾ä±ú//
+HWND g_hInfoDialogbroadcast_information = NULL;//¹ã²¥¿òÓÃ»§ĞÅÏ¢¶Ô»°¿ò¾ä±ú//
 
 std::queue<std::wstring>g_msgQueue;//ÏûÏ¢¶ÓÁĞ//
 CRITICAL_SECTION g_csMsgQueue;//Ïß³ÌÍ¬²½Ëø//
@@ -53,11 +68,13 @@ struct receivedData {
 
 
 MYSQL* conn = mysql_init(NULL);//Êı¾İ¿â³õÊ¼»¯//
+
 void HandleClient_informationset(SOCKET client_server);
-void HandleClient_login(SOCKET client_server);//µÇÂ¼´¦ÀíÏß³Ì//
+void HandleClient_login(SOCKET client_server,std::string);//µÇÂ¼´¦ÀíÏß³Ì//
 void HandleClient_passwordset(SOCKET client_server);
 void HandleClient_photoset(SOCKET client_server);
-void Handlelogin_pro(SOCKET client_server, receivedData my_data);
+void Handlelogin_pro(SOCKET client_server, receivedData my_data,std::string);
+
 //Êı¾İ½ÓÊÕº¯Êı//
 int recvAll(SOCKET socket, char* buffer, int len, int y = 0)
 {
@@ -81,7 +98,65 @@ struct Userdata
 	std::vector<BYTE>imgData;//ÓÃ»§Í·ÏñÊı¾İ//
 	std::string account;//ÓÃ»§ÕËºÅ//
 };
-std::vector<Userdata> g_users;
+std::vector<Userdata> g_users;//ÓÃÓÚ¼ÓÔØÊı¾İ¿âÀïµÄËùÓĞÓÃ»§ĞÅÏ¢£¬À´±£³ÖÓÃ»§ÁĞ±í¸üĞÂ//
+
+std::mutex g_onlineUsersMutex;//ÔÚÏßÓÃ»§ÁĞ±íËø//
+struct User_account
+{
+	std::string account;//ÓÃ»§ÕËºÅ//
+};
+std::vector<User_account> g_onlineUsers;//ÓÃÀ´¼ÇÂ¼ÔÚÏßµÄÓÃ»§//
+
+
+std::mutex g_users_online_Mutex;//ÔÚÏßÓÃ»§Ëø//
+//´æ´¢ÓÃ»§ÕËºÅºÍsocketÀ´ÊµĞĞ¹ã²¥µÄĞÅÏ¢·Ö·¢//
+struct User_online
+{
+	std::string account;
+	SOCKET socket;
+};
+std::vector<User_online> g_users_online;
+
+//ÔÚÏßÓÃ»§ÁĞ±í¸üĞÂ//
+std::mutex users_online_mutex;
+std::condition_variable users_online_cv;
+bool users_online_update_signal = false;
+
+std::vector<std::string>g_select_offline_users_account;//´æ´¢¹ã²¥¿òÖĞÑ¡ÖĞµÄÓÃ»§ÖĞÀëÏßµÄÓÃ»§ÕËºÅ//
+std::mutex g_users_account_sel_broadcast_Mutex;//À´È·±£Ïß³Ì°²È«//
+
+struct offline_users_and_information//´æ´¢ÀëÏßÓÃ»§ÕËºÅºÍ¹ã²¥ÏûÏ¢//
+{
+	std::string account;
+	std::string information;
+};
+std::vector<offline_users_and_information>g_offline_users_and_information;
+std::mutex g_users_account_and_information_sel_broadcast_Mutex;//À´È·±£Ïß³Ì°²È«//
+
+// ´æ´¢ÀëÏßÓÃ»§êÇ³ÆÏûÏ¢
+std::vector<std::string>g_offline_users_nickname;
+std::mutex g_users_nickname_sel_broadcast_Mutex;//À´È·±£Ïß³Ì°²È«//
+
+struct users_anii_on_chartroom
+{
+	std::string user_on_chartroom_account;
+	std::string user_on_chartroom_nickname;
+	std::vector<BYTE> user_on_chartroom_image;
+	std::string user_on_chartroom_inf;
+};
+std::vector  <users_anii_on_chartroom> users_account_on_chartroom;//´æ´¢ÒÑ¾­½øÈëÁÄÌìÊÒµÄÓÃ»§ÕËºÅ
+std::mutex users_anii_on_chartroom_mutex;//¼ÓËø
+
+
+struct users_chart_information
+{
+	std::string inf_send_account;
+	std::string inf_recv_account;
+	std::string inf;
+};
+std::vector<users_chart_information>g_users_chart_information;
+std::mutex g_users_chart_information_mutex;
+
 
 INT_PTR CALLBACK Dialog_one(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//¿ªÊ¼¶Ô»°¿ò//
 {
@@ -148,7 +223,7 @@ INT_PTR CALLBACK Dialog_end(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 	switch (uMsg)
 	{
 	case WM_INITDIALOG:
-		TimeID = SetTimer(hwndDlg, 1, 4000, NULL);//ÏÔÊ¾µÚÒ»¸ö¶Ô»°¿òµÄÄÚÈİ£¬ÑÓ³Ù3Ãë//
+		TimeID = SetTimer(hwndDlg, 1, 0, NULL);//ÏÔÊ¾µÚÒ»¸ö¶Ô»°¿òµÄÄÚÈİ£¬ÑÓ³Ù4Ãë//
 		hBackgroundBrush = CreateSolidBrush((RGB(200, 230, 255)));//ÉèÖÃ±³¾°Îªµ­À¶É«//
 		return (INT_PTR)TRUE;//ÉèÖÃ½¹µã//
 	case WM_DRAWITEM: {
@@ -167,7 +242,8 @@ INT_PTR CALLBACK Dialog_end(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 		{
 			KillTimer(hwndDlg, TimeID);//Ïú»Ù¶¨Ê±Æ÷//
 			DeleteObject(hBackgroundBrush);//ÊÍ·Å»­Ë¢//
-			EndDialog(hwndDlg, IDOK);//¹Ø±Õ¶Ô»°¿ò//
+			//EndDialog(hwndDlg, IDOK);//¹Ø±Õ¶Ô»°¿ò//
+			exit(0);//ÍË³ö³ÌĞò//
 		}
 		return (INT_PTR)TRUE;
 	case WM_CLOSE:
@@ -290,7 +366,6 @@ INT_PTR CALLBACK Dialog_information(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPAR
 }
 
 
-
 INT_PTR CALLBACK Dialog_photo(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//Í·ÏñÏÔÊ¾¿ò//
 {
 	switch (uMsg)
@@ -306,6 +381,7 @@ INT_PTR CALLBACK Dialog_photo(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		{
 			DestroyWindow(hwndDlg);
 			g_hInfoDialogphoto = NULL;
+			DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_MYDIALOG_END), NULL, Dialog_end);//½áÊø¿ò//
 			return (INT_PTR)TRUE;
 		}
 	}
@@ -364,6 +440,7 @@ INT_PTR CALLBACK Dialog_monitor(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM l
 		{
 			DestroyWindow(hwndDlg);
 			g_hInfoDialogmonitor= NULL;
+			DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_MYDIALOG_END), NULL, Dialog_end);//½áÊø¿ò//
 			return (INT_PTR)TRUE;
 		}
 	}
@@ -371,19 +448,133 @@ INT_PTR CALLBACK Dialog_monitor(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM l
 }
 
 
+INT_PTR CALLBACK Dialog_broadcast_information(HWND hndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//¹ã²¥ĞÅÏ¢¶Ô»°¿ò//
+{
+	switch (uMsg)
+{
+	case WM_INITDIALOG:
+	{
+		HWND hEdit = GetDlgItem(hndDlg, IDC_BROADCAST_INFORAMATION_EDIT);//»ñÈ¡ÏûÏ¢¿ò¾ä±ú
+		HWND hBtn = GetDlgItem(hndDlg, IDOK);//»ñÈ¡·¢ËÍ°´Å¥¾ä±ú
+		int len = GetWindowTextLength(hEdit);//»ñÈ¡ÏûÏ¢¿òÎÄ±¾³¤¶È
+		EnableWindow(hBtn, len > 0 ? TRUE : FALSE);
+		return (INT_PTR)TRUE;
+	}
+	case WM_COMMAND:
+	{
+		// ¼ì²â±à¼­¿òÄÚÈİ±ä»¯
+		if (HIWORD(wParam) == EN_CHANGE && LOWORD(wParam) == IDC_BROADCAST_INFORAMATION_EDIT)
+		{
+			HWND hEdit = GetDlgItem(hndDlg, IDC_BROADCAST_INFORAMATION_EDIT);
+			HWND hBtn = GetDlgItem(hndDlg, IDOK);
+			int len = GetWindowTextLength(hEdit);
+			EnableWindow(hBtn, len > 0 ? TRUE : FALSE);
+			return (INT_PTR)TRUE;
+		}
+		switch (LOWORD(wParam))
+	  {
+		case IDCANCEL:
+		{
+			EndDialog(hndDlg, IDCANCEL);
+			return (INT_PTR)TRUE;
+		}
+		case IDOK:
+		{
+			
+			//»ñÈ¡¿Ø¼şIDC_BROADCAST_INFORAMATION_EDITµÄ¾ä±ú
+			HWND hEdit = GetDlgItem(hndDlg, IDC_BROADCAST_INFORAMATION_EDIT);
+			//»ñÈ¡¸Ã¿Ø¼şÎÄ±¾ĞÅÏ¢
+			int len = GetWindowTextLength(hEdit);//»ñÈ¡ÎÄ±¾³¤¶È,²»º¬'\0'//
+			if (len <= 0)
+			{
+				MessageBox(NULL,L"·¢ËÍÏûÏ¢²»ÔÊĞíÎª¿Õ",L"QQ",MB_ICONERROR);
+				return (INT_PTR)TRUE;
+			}
+			std::wstring text(len+1, L'\0');
+			GetWindowText(hEdit, &text[0], len + 1);//¸øÎÄ±¾×Ô¶¯Ìí¼ÓL'\0'
+			//×ªÎªUTF-8
+			int utf8len = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, NULL, 0, NULL, NULL);//°üº¬'\0'±¾Éí
+			std::string msg(utf8len, '\0');
+			WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, &msg[0], utf8len, NULL, NULL);//´æ´¢Òª·¢ËÍµÄ¹ã²¥ÏûÏ¢
+			//Çå¿ÕÎÄ±¾¿ò
+			SetDlgItemText(hndDlg, IDC_BROADCAST_INFORAMATION_EDIT, L"");
+			
+			HWND hBtn = GetDlgItem(hndDlg, IDOK);
+			EnableWindow(hBtn,FALSE);//ÊÖ¶¯½ûÓÃ·¢ËÍ°´Å¥
 
 
+			//½«ÏûÏ¢ÏÔÊ¾		
+			for (const auto &acc_nickname:g_offline_users_nickname)
+			{
+				//»ñÈ¡µ±Ç°Ê±¼ä//
+				time_t now_one = time(0);//»ñÈ¡µ±Ç°Ê±¼ä£¬¾«È·µ½Ãë//
+				tm tm_one;//ÉùÃ÷Ò»¸ö½á¹¹Ìå£¬ÓÃÓÚ´æ´¢±¾µØÊ±¼äµÄ¸÷¸ö×é³É²¿·Ö//
+				localtime_s(&tm_one, &now_one);//½«now_one£¨ÊäÈë£©ÀïµÄÄÚÈİ¸´ÖÆµ½tm_oneÀïÊä³ö//
+				wchar_t timeBuffer_one[64];
+				wcsftime(timeBuffer_one, sizeof(timeBuffer_one) / sizeof(wchar_t), L"%Y-%m-%d %H:%M:%S", &tm_one);
+				//MessageBox(NULL, L"ÒÑ¾­×¼±¸ºÃÁËÊ±¼ä×Ö¶Î", L"QQ", MB_ICONINFORMATION);
 
 
+				std::wstring msg_one = L"[";
+				msg_one += timeBuffer_one;
+				msg_one += L"][";
+				msg_one += L"·şÎñÆ÷";
+				msg_one += L"->";
 
+				//ÓÃ»§êÇ³Æ
+				int  w_s_nickname_len = 0;
+				w_s_nickname_len = MultiByteToWideChar(CP_UTF8, 0, acc_nickname.c_str(), acc_nickname.size(), NULL, 0);
+				std::wstring w_s_nickname_str(w_s_nickname_len, L'\0');
+				MultiByteToWideChar(CP_UTF8, 0, acc_nickname.c_str(), acc_nickname.size(), &w_s_nickname_str[0], w_s_nickname_len);
 
+				msg_one += w_s_nickname_str;
+				msg_one += L"]";
 
+				int  w_s_len = 0;
+				w_s_len = MultiByteToWideChar(CP_UTF8, 0,msg.c_str(),msg.size(), NULL, 0);
+				std::wstring w_s_str(w_s_len, L'\0');
+				MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), msg.size(), &w_s_str[0], w_s_len);
+				msg_one += w_s_str.c_str();
 
+				//»ñÈ¡Ô­À´µÄÎÄ±¾
+				HWND h_text = GetDlgItem(hndDlg, IDC_BROADCAST_INFORAMATION);
+				int w_text = GetWindowTextLength(h_text);
+				std::wstring old_text(w_text+1,L'\0');
+				GetWindowText(h_text,&old_text[0],w_text+1);
+				
+				
+					if (!old_text.empty() && old_text.back() == L'\0')
+					{
+						old_text.pop_back();
+						old_text += L"\r\n";
+					}
+				
+				old_text += msg_one;
+				SetDlgItemText(hndDlg, IDC_BROADCAST_INFORAMATION,old_text.c_str());
 
+			}
 
+			//¶ÔÓÚÀëÏßÓÃ»§µÄÏûÏ¢´¦Àí//
+			for (const auto& offline_account : g_select_offline_users_account)
+			{
+				offline_users_and_information info;
+				info.account = offline_account;//´æ´¢ÀëÏßÕËºÅ
+				info.information = msg;//´æ´¢ÏûÏ¢string¸ñÊ½,º¬'\0'
+				std::lock_guard<std::mutex> lock_broadcast_account(g_users_account_and_information_sel_broadcast_Mutex);//À´È·±£Ïß³Ì°²È«//
+				g_offline_users_and_information.push_back(info);
+			}
+			if (g_offline_users_and_information.empty())
+			{
+				MessageBox(NULL, L"Î´ÄÜ½«ÏûÏ¢ºÍ¶ÔÓ¦µÄÓÃ»§ÕËºÅÒ»Æğ´æ´¢", L"QQ", MB_ICONERROR);
+			}
+			return (INT_PTR)TRUE;
+		}
 
-
-
+	  }
+	}
+  }
+	return (INT_PTR)FALSE;
+}
 
 
 INT_PTR CALLBACK Dialog_broadcast(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//¹ã²¥¿ò//
@@ -400,8 +591,16 @@ INT_PTR CALLBACK Dialog_broadcast(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM
 		int idx = SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)L"ÕıÔÚ³õÊ¼»¯");//·µ»Ø¸ÃÏîÄÚÈİµÄË÷Òı//
 		SendMessage(hList, LB_SETITEMDATA, idx, (LPARAM)-1); // ÓÃ-1Çø·Ö//
 
+		SendMessage(hList, LB_SETSEL, FALSE, -1);//È¡ÏûËùÓĞÑ¡ÖĞÏî//
+		LONG style = GetWindowLong(hList, GWL_STYLE);//»ñÈ¡µ±Ç°¿Ø¼şµÄÑùÊ½//
+		style &= ~(LBS_SINGLESEL);//Çå³ıLBS_OWNERDRAWFIXEDÑùÊ½//
+		style |= LBS_MULTIPLESEL;  // Ôö¼Ó¶àÑ¡£¬Ö§³ÖCtrl/Shift
+		SetWindowLong(hList, GWL_STYLE, style); // Ó¦ÓÃĞÂÑùÊ½
+		HWND hBtn = GetDlgItem(hwndDlg, IDOK); //²¥°´Å¥¾ä±ú//
+		EnableWindow(hBtn, FALSE); // ³õÊ¼½ûÓÃ¹ã²¥°´Å¥
 		return (INT_PTR)TRUE;
 	}
+
 	case  WM_APP_UPDATEBROADCAST_MSG:          //¸üĞÂÓÃ»§ÁĞ±íÏûÏ¢//
 	{
 		HWND hList = GetDlgItem(hwndDlg, IDC_USERS);//»ñÈ¡ÓÃ»§ÁĞ±í¾ä±ú
@@ -409,26 +608,86 @@ INT_PTR CALLBACK Dialog_broadcast(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM
 		std::lock_guard<std::mutex> lock(g_usersMutex);
 		for (int i = 0; i < g_users.size(); ++i)
 		{
-			SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)L"");
-			SendMessage(hList, LB_SETITEMDATA, i, (LPARAM)i);
+			//SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)L"");
+			//SendMessage(hList, LB_SETITEMDATA,i, (LPARAM)i);
+			 // Õ¹Ê¾ÕËºÅ+êÇ³Æ
+			std::wstring wdisplay;
+			{
+				// ÕËºÅ
+				int wlen_acc = MultiByteToWideChar(CP_UTF8, 0, g_users[i].account.c_str(), (int)g_users[i].account.size(), NULL, 0);
+				std::wstring wacc(wlen_acc, 0);
+				MultiByteToWideChar(CP_UTF8, 0, g_users[i].account.c_str(), (int)g_users[i].account.size(), &wacc[0], wlen_acc);
+
+				// êÇ³Æ
+				int wlen_nick = MultiByteToWideChar(CP_UTF8, 0, g_users[i].nickname.c_str(), (int)g_users[i].nickname.size(), NULL, 0);
+				std::wstring wnick(wlen_nick, 0);
+				MultiByteToWideChar(CP_UTF8, 0, g_users[i].nickname.c_str(), (int)g_users[i].nickname.size(), &wnick[0], wlen_nick);
+
+				wdisplay = wacc + L" " + wnick;
+			}
+			int itemIdx = (int)SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)wdisplay.c_str());
+			SendMessage(hList, LB_SETITEMDATA, itemIdx, (LPARAM)i);
 		}
 		return (INT_PTR)TRUE;
 	}
 	case WM_COMMAND:
 	{
+		HWND hList = GetDlgItem(hwndDlg, IDC_USERS);
+		HWND hBtn = GetDlgItem(hwndDlg, IDOK);
+		if (HIWORD(wParam) == LBN_SELCHANGE && LOWORD(wParam) == IDC_USERS)
+		{
+			int selCount = (int)SendMessage(hList, LB_GETSELCOUNT, 0, 0);
+			EnableWindow(hBtn, selCount > 0 ? TRUE : FALSE);
+		}
+
+
 		switch (LOWORD(wParam))
 		{
 		case IDCANCEL:
 		{
 			DestroyWindow(hwndDlg);
 			g_hInfoDialogbroadcast = NULL;
+			DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_MYDIALOG_END), NULL, Dialog_end);//½áÊø¿ò//
 			return (INT_PTR)TRUE;
 		}
 		case IDOK:
 		{
+			// Çå¿ÕÉÏ´ÎµÄÑ¡Ôñ
+			g_select_offline_users_account.clear();
+			g_offline_users_nickname.clear();
+
+			int selCount = (int)SendMessage(hList, LB_GETSELCOUNT, 0, 0);
+			if (selCount > 0)
+			{
+				std::vector<int> selItems(selCount, 0);
+				SendMessage(hList, LB_GETSELITEMS, selCount, (LPARAM)selItems.data());
+
+				for (int i = 0; i < selCount; ++i)
+				{
+					int itemIdx = selItems[i];
+					int userIdx = (int)SendMessage(hList, LB_GETITEMDATA, itemIdx, 0);
+					if (userIdx < 0 || userIdx >= (int)g_users.size()) continue;
+					const std::string& account = g_users[userIdx].account;
+					std::lock_guard<std::mutex> lock_broadcast_account(g_users_account_sel_broadcast_Mutex);//À´È·±£Ïß³Ì°²È«//
+					g_select_offline_users_account.push_back(account);//½«È«²¿Ñ¡ÖĞµÄÓÃ»§ÕËºÅ´æ´¢
+
+					// ´æ´¢Ñ¡ÖĞÓÃ»§êÇ³ÆÏûÏ¢
+					std::lock_guard<std::mutex>lock_broadcast_nickname(g_users_nickname_sel_broadcast_Mutex);
+					g_offline_users_nickname.push_back(g_users[userIdx].nickname);
+
+				}
+			}
+			if (g_select_offline_users_account.empty())
+			{
+				MessageBox(NULL,L"Î´ÄÜ½«Ñ¡ÖĞµÄ¹ã²¥¶ÔÏóÕËºÅ´æ´¢",L"QQ",MB_ICONERROR);
+				return (INT_PTR)TRUE;
+			}
+			DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_MYDIALOG_BROADCAST_INFORMATION), NULL, Dialog_broadcast_information);//¹ã²¥ĞÅÏ¢¶Ô»°¿ò//
 			return (INT_PTR)TRUE;
 		}
+
 		}
+		break;
 	}
 	case WM_MEASUREITEM:
 	{
@@ -442,13 +701,19 @@ INT_PTR CALLBACK Dialog_broadcast(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM
 	case WM_DRAWITEM:
 	{
 		LPDRAWITEMSTRUCT dis = (LPDRAWITEMSTRUCT)lParam;//Ö¸ÏòÒ»¸öDRAWITEMSTRUCT½á¹¹ÌåµÄÖ¸Õë//
-		if (dis->CtlID == IDC_USERS && dis->itemID < g_users.size())
+		if (dis->CtlID == IDC_USERS)
 		{
+			size_t idx = dis->itemData;
+
 			std::lock_guard<std::mutex> lock(g_usersMutex);
+			if (idx == (size_t)-1 || idx >= g_users.size())
+			{
+				return (INT_PTR)FALSE;
+			}
+
+			const Userdata& user = g_users[idx];
 			HDC hdc = dis->hDC;//»æÍ¼Éè±¸»·¾³//
 			RECT rc = dis->rcItem;//Ğè»æÖÆµÄÏîµÄ¾ØĞÎÇøÓò//
-			size_t idx = dis->itemData;
-			const Userdata& user = g_users[idx];
 
 			//»­±³¾°//
 			SetBkMode(hdc,OPAQUE);//ÉèÖÃÉè±¸»·¾³µÄ±³¾°»ìºÏÄ£Ê½ÎªOPAQUE//
@@ -485,30 +750,27 @@ INT_PTR CALLBACK Dialog_broadcast(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM
 				GlobalFree(hMem);//ÊÍ·ÅÄÚ´æ//
 			}
 
-			/*
-			//»­êÇ³Æ//
-			RECT rcText = rc;
-			rcText.left += imgsize + 8;
-			rcText.top += 12;
-			int wlen = MultiByteToWideChar(CP_UTF8,0,user.nickname.c_str(),user.nickname.size()+1,NULL,0);
-			std::wstring wnick(wlen, 0);
-			MultiByteToWideChar(CP_UTF8, 0, user.nickname.c_str(), user.nickname.size() + 1,&wnick[0], wlen);//½«ÎÄ±¾×ª»¯Îª¿í×Ö·û´®//
-			//DrawTextW(hdc,wnick.c_str(),wlen,&rcText,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
-			DrawTextW(hdc, wnick.c_str(), wlen, &rcText, DT_LEFT | DT_TOP|DT_SINGLELINE);
+			//²éÑ¯ÔÚÏßÓÃ»§ÖĞ¸ÃÓÃ»§µÄÕËºÅÊÇ·ñ´æÔÚ//
+			bool isOnline = false;
+			{
+				std::lock_guard<std::mutex> lock(g_onlineUsersMutex);
+				for (const auto& user_account_online : g_onlineUsers)
+				{
+					std::string x = user_account_online.account;//g_user²»º¬¡®\0¡¯½áÎ²//
+					if (!x.empty()&&x.back() == '\0')
+					{
+						x.pop_back();
+					}
+					if (strcmp(x.c_str(), user.account.c_str()) == 0)
+					{
+						isOnline = true;
+						break;
+					}
+				}
+			}
 
-			
-			// ¼ÆËãêÇ³Æ¸ß¶È
-			DrawTextW(hdc, wnick.c_str(), wlen, &rcText, DT_LEFT | DT_TOP|DT_SINGLELINE| DT_CALCRECT);
-
-			//»­ÕËºÅ//
-			RECT rcAccount = rcText;
-			rcAccount.top =rcText.bottom+8;
-			rcAccount.bottom = rcAccount.top + (rcText.bottom - rcText.top); //¸üĞÂrcAccount.bottom//
-			int wlen2 = MultiByteToWideChar(CP_UTF8, 0, user.nickname.c_str(), user.nickname.size() + 1, NULL, 0);
-			std::wstring wnick_2(wlen2, 0);
-			MultiByteToWideChar(CP_UTF8, 0, user.nickname.c_str(), user.nickname.size() + 1, &wnick_2[0], wlen2);//½«ÎÄ±¾×ª»¯Îª¿í×Ö·û´®//
-			DrawTextW(hdc, wnick_2.c_str(), wlen2, &rcAccount, DT_LEFT | DT_TOP|DT_SINGLELINE);
-			*/
+			// ÉèÖÃÑÕÉ«
+			COLORREF textColor = isOnline ? RGB(0, 128, 0) : RGB(255, 0, 0);
 
 			//»­ÕËºÅ//
 			RECT rcAccount = rc;
@@ -518,6 +780,7 @@ INT_PTR CALLBACK Dialog_broadcast(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM
 			std::wstring wnick(wlen, 0);
 			MultiByteToWideChar(CP_UTF8, 0, user.account.c_str(), user.account.size() + 1, &wnick[0], wlen);//½«ÎÄ±¾×ª»¯Îª¿í×Ö·û´®//
 			//DrawTextW(hdc,wnick.c_str(),wlen,&rcText,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+			SetTextColor(hdc, textColor); // ÉèÖÃÎÄ±¾ÑÕÉ«
 			DrawTextW(hdc, wnick.c_str(), wlen, &rcAccount, DT_LEFT | DT_TOP | DT_SINGLELINE);
 
 
@@ -528,11 +791,23 @@ INT_PTR CALLBACK Dialog_broadcast(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM
 			RECT rcText = rcAccount;
 			rcText.top = rcAccount.bottom + 8;
 			rcText.bottom = rcText.top + (rcAccount.bottom - rcAccount.top); //¸üĞÂrcText.bottom//
+			rcText.right +=1000;
 			int wlen2 = MultiByteToWideChar(CP_UTF8, 0, user.nickname.c_str(), user.nickname.size() + 1, NULL, 0);
 			std::wstring wnick_2(wlen2, 0);
 			MultiByteToWideChar(CP_UTF8, 0, user.nickname.c_str(), user.nickname.size() + 1, &wnick_2[0], wlen2);//½«ÎÄ±¾×ª»¯Îª¿í×Ö·û´®//
+			SetTextColor(hdc, textColor);
 			DrawTextW(hdc, wnick_2.c_str(), wlen2, &rcText, DT_LEFT | DT_TOP | DT_SINGLELINE);
 
+			//»­µÇÂ¼×´Ì¬//
+			int big_num = (wlen2 > wlen) ? wlen2 : wlen;
+			std::wstring big_str = (wnick.size() >wnick_2.size()) ? wnick:wnick_2;
+			SIZE sz;
+			GetTextExtentPoint32W(hdc, big_str.c_str(), big_num, &sz);//»ñÈ¡ÎÄ±¾µÄ¿í¶ÈºÍ¸ß¶È//
+			RECT rcRegister= rcAccount;
+			rcRegister.left +=sz.cx;//¸üĞÂÎÄ±¾¿òµÄ×ó±ß¿ò//
+			rcRegister.right += sz.cx;//¸üĞÂÎÄ±¾¿òµÄÓÒ±ß¿ò//
+			SetTextColor(hdc, textColor);
+			DrawTextW(hdc, isOnline ? L"ÔÚÏß" : L"ÀëÏß", -1, & rcRegister, DT_LEFT | DT_VCENTER| DT_SINGLELINE);
 
 			//»­½¹µã¿ò//
 			if (dis->itemState & ODS_FOCUS)
@@ -545,14 +820,6 @@ INT_PTR CALLBACK Dialog_broadcast(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM
 	}
 	return (INT_PTR)FALSE;
 }
-
-
-
-
-
-
-
-
 
 
 
@@ -580,8 +847,67 @@ void SaveToDatabase(receivedData regData)
 }
 
 
+
+
+void update_new_users_list()//¸üĞÂ¹ã²¥¿òÓÃ»§ÁĞ±í
+{
+	    MYSQL* conn_5 = mysql_init(NULL);
+		int con_num = 0;
+		while (!mysql_real_connect(conn_5, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))//Á¬½ÓÊı¾İ¿â//
+		{
+			MessageBox(NULL, L"Á¬½ÓÊı¾İ¿âÊ§°Ü", L"QQ", MB_ICONERROR);
+			con_num++;
+			if (con_num > 3)
+			{
+				return ;
+			}
+		}
+
+		std::vector<Userdata>temp_users;
+		temp_users.clear();
+		const char* sql = "SELECT nickname,imgData,account FROM users";//SQLÃüÁîÓï¾ä//
+		if (mysql_query(conn_5, sql))//Èç¹ûÃ»ÓĞ·ûºÏµÄ²éÑ¯½á¹û£¬·µ»Ø·ÇÁãÖµ//
+		{
+			//MessageBox(NULL, L"Ã»ÓĞ·ûºÏµÄêÇ³ÆºÍÍ·Ïñ", L"QQ", MB_ICONERROR);
+			return;
+		}
+
+		MYSQL_RES* res = mysql_store_result(conn_5);//Ò»¸ö½á¹û¼¯//
+		if (!res)
+		{
+			return;
+		}
+		MYSQL_ROW  row;//Ö¸Ïò×Ö·û´®Êı×éµÄÖ¸Õë//
+		unsigned long* lengths;
+		while ((row = mysql_fetch_row(res)))//È¡Ä³Ò»ĞĞ²éÑ¯½á¹û¼¯//
+		{
+			lengths = mysql_fetch_lengths(res);//È¡Ä³Ò»ĞĞ²éÑ¯½á¹û³¤¶È¼¯//
+			Userdata user;
+			if (row[0])
+			{
+				user.nickname = row[0];
+			}
+			if (row[1] && lengths[1] > 0)
+			{
+				user.imgData.assign((BYTE*)row[1], (BYTE*)row[1] + lengths[1]);
+			}
+			if (row[2])
+			{
+				user.account = row[2];
+			}
+			temp_users.push_back(std::move(user));//½«Ìî³äºÃµÄÓÃ»§¶ÔÏóÒÆ¶¯µ½È«¾ÖÓÃ»§ÁĞ±íÀï£¬·ÀÖ¹²»±ØÒªµÄ¿½±´//
+		}
+		mysql_free_result(res);
+		std::lock_guard<std::mutex>lock(g_usersMutex);//¼ÓËø//
+		g_users.swap(temp_users);
+
+		if (g_hInfoDialogbroadcast && IsWindow(g_hInfoDialogbroadcast))//µÈ´ı¾ä±úÓĞĞ§//
+			PostMessage(g_hInfoDialogbroadcast, WM_APP_UPDATEBROADCAST_MSG, 0, 0); // ×Ô¶¨ÒåÏûÏ¢
+}
+
 void HandleClient_register(SOCKET client_server)//×¢²á´¦ÀíÏß³Ì//
 {
+	std::string new_online_user_account;
 	//µÚÒ»¸öÅĞ¶Ï//
 	int len_one = 0;//½ÓÊÕ¿Í»§¶ËµÃµ½ÕËºÅºóµÄÑ¡Ôñ£¬¼ÌĞø »ò È¡Ïû// 
 	recvAll(client_server, (char*)&len_one, sizeof(len_one), 0);//ÏÈ½ÓÊÕ×Ö½Ú³¤¶È//
@@ -630,7 +956,8 @@ void HandleClient_register(SOCKET client_server)//×¢²á´¦ÀíÏß³Ì//
 		else if (wcscmp(wrecvchar.c_str(), L"µÇÂ¼") == 0)//µÇÂ¼Ïß³Ì//
 		{
 			//MessageBox(NULL, L"½ÓÊÕµ½µÇÂ¼ÏûÏ¢£¬¼´½«ÆôÓÃµÇÂ¼Ïß³Ì", L"QQ", MB_ICONINFORMATION);
-			std::thread(HandleClient_login, client_server).detach();//´´½¨µÇÂ¼Ïß³Ì//
+		
+			std::thread(HandleClient_login, client_server,new_online_user_account).detach();//´´½¨µÇÂ¼Ïß³Ì//
 		}
 		else
 		{
@@ -731,10 +1058,10 @@ void HandleClient_register(SOCKET client_server)//×¢²á´¦ÀíÏß³Ì//
 					}
 					else if (wcscmp(wreceived_five.c_str(), L"È·¶¨") == 0)
 					{
-						std::lock_guard<std::mutex>lk(users_mutex);
-						users_update_signal = true;
-						users_cv.notify_one();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
-
+						//std::lock_guard<std::mutex>lk(users_mutex);
+						//users_update_signal = true;
+						//users_cv.notify_one();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
+						
 						int x = 0;
 						receivedData regData;//½á¹¹Ìå£¬½ÓÊÜÍêÕûÊı¾İ//
 						while (true)
@@ -860,6 +1187,7 @@ void HandleClient_register(SOCKET client_server)//×¢²á´¦ÀíÏß³Ì//
 								break;
 							}
 						}
+						update_new_users_list();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
 						//Ìø³ö×¢²áÏß³Ì//
 					   //ÅĞ¶Ï¾ßÌåÖ´ĞĞÄÄÖÖÏß³Ì,µÇÂ¼»ò×¢²á//
 						int recv_len = 0;
@@ -894,7 +1222,7 @@ void HandleClient_register(SOCKET client_server)//×¢²á´¦ÀíÏß³Ì//
 						else if (wcscmp(wrecvchar.c_str(), L"µÇÂ¼") == 0)//µÇÂ¼Ïß³Ì//
 						{
 							//MessageBox(NULL, L"½ÓÊÕµ½µÇÂ¼ÏûÏ¢£¬¼´½«ÆôÓÃµÇÂ¼Ïß³Ì", L"QQ", MB_ICONINFORMATION);
-							std::thread(HandleClient_login, client_server).detach();//´´½¨µÇÂ¼Ïß³Ì//
+							std::thread(HandleClient_login, client_server,new_online_user_account).detach();//´´½¨µÇÂ¼Ïß³Ì//
 						}
 						else
 						{
@@ -914,6 +1242,7 @@ void HandleClient_register(SOCKET client_server)//×¢²á´¦ÀíÏß³Ì//
 //¿Í»§¶ËÃÜÂëÉèÖÃÑ¡ÔñÅĞ¶ÏÏß³Ì//
 void HandleClient_passwordset(SOCKET client_server)
 {
+	std::string new_online_user_account;
 	//µÚ¶ş¸öÅĞ¶Ï//
 	//¿Í»§¶ËÃÜÂëÉèÖÃÑ¡ÔñÅĞ¶Ï Íê³É»òÈ¡Ïû //
 	int len_two = 0;//½ÓÊÕ¿Í»§¶ËÃÜÂëÉèÖÃºóµÄÑ¡Ôñ£¬Íê³É »ò È¡Ïû//
@@ -996,10 +1325,10 @@ void HandleClient_passwordset(SOCKET client_server)
 				}
 				else if (wcscmp(wreceived_five.c_str(), L"È·¶¨") == 0)
 				{
-					std::lock_guard<std::mutex>lk(users_mutex);
-					users_update_signal = true;
-					users_cv.notify_one();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
-
+					//std::lock_guard<std::mutex>lk(users_mutex);
+					//users_update_signal = true;
+					//users_cv.notify_one();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
+					//update_new_users_list();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
 					int x = 0;
 					receivedData regData;//½á¹¹Ìå£¬½ÓÊÜÍêÕûÊı¾İ//
 					while (true)
@@ -1125,6 +1454,7 @@ void HandleClient_passwordset(SOCKET client_server)
 							break;
 						}
 					}
+					update_new_users_list();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
 					//Ìø³ö×¢²áÏß³Ì//
 				   //ÅĞ¶Ï¾ßÌåÖ´ĞĞÄÄÖÖÏß³Ì,µÇÂ¼»ò×¢²á//
 					int recv_len = 0;
@@ -1159,7 +1489,7 @@ void HandleClient_passwordset(SOCKET client_server)
 					else if (wcscmp(wrecvchar.c_str(), L"µÇÂ¼") == 0)//µÇÂ¼Ïß³Ì//
 					{
 						//MessageBox(NULL, L"½ÓÊÕµ½µÇÂ¼ÏûÏ¢£¬¼´½«ÆôÓÃµÇÂ¼Ïß³Ì", L"QQ", MB_ICONINFORMATION);
-						std::thread(HandleClient_login, client_server).detach();//´´½¨µÇÂ¼Ïß³Ì//
+						std::thread(HandleClient_login, client_server,new_online_user_account).detach();//´´½¨µÇÂ¼Ïß³Ì//
 					}
 					else
 					{
@@ -1178,6 +1508,7 @@ void HandleClient_passwordset(SOCKET client_server)
 //¸öÈËĞÅÏ¢¿òÉèÖÃÏß³Ì//
 void HandleClient_informationset(SOCKET client_server)
 {
+	std::string new_online_user_account;
 	MessageBox(NULL, L"Äã¼´½«Æô¶¯¸öÈËĞÅÏ¢ÉèÖÃÏß³Ì", L"QQ", MB_ICONINFORMATION);
 	//µÚÈı¸öÅĞ¶Ï//
 	//¿Í»§¶Ë¸öÈËĞÅÏ¢ÉèÖÃÑ¡ÔñÅĞ¶Ï È·¶¨»òÈ¡Ïû //
@@ -1240,10 +1571,10 @@ void HandleClient_informationset(SOCKET client_server)
 			}
 			else if (wcscmp(wreceived_five.c_str(), L"È·¶¨") == 0)
 			{
-				std::lock_guard<std::mutex>lk(users_mutex);
-				users_update_signal = true;
-				users_cv.notify_one();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
-
+				//std::lock_guard<std::mutex>lk(users_mutex);
+				//users_update_signal = true;
+				//users_cv.notify_one();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
+				//update_new_users_list();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
 				int x = 0;
 				receivedData regData;//½á¹¹Ìå£¬½ÓÊÜÍêÕûÊı¾İ//
 				while (true)
@@ -1369,6 +1700,7 @@ void HandleClient_informationset(SOCKET client_server)
 						break;
 					}
 				}
+				update_new_users_list();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
 				//Ìø³ö×¢²áÏß³Ì//
 			   //ÅĞ¶Ï¾ßÌåÖ´ĞĞÄÄÖÖÏß³Ì,µÇÂ¼»ò×¢²á//
 				int recv_len = 0;
@@ -1403,7 +1735,7 @@ void HandleClient_informationset(SOCKET client_server)
 				else if (wcscmp(wrecvchar.c_str(), L"µÇÂ¼") == 0)//µÇÂ¼Ïß³Ì//
 				{
 					//MessageBox(NULL, L"½ÓÊÕµ½µÇÂ¼ÏûÏ¢£¬¼´½«ÆôÓÃµÇÂ¼Ïß³Ì", L"QQ", MB_ICONINFORMATION);
-					std::thread(HandleClient_login, client_server).detach();//´´½¨µÇÂ¼Ïß³Ì//
+					std::thread(HandleClient_login, client_server,new_online_user_account).detach();//´´½¨µÇÂ¼Ïß³Ì//
 				}
 				else
 				{
@@ -1420,6 +1752,7 @@ void HandleClient_informationset(SOCKET client_server)
 //Í·ÏñÉèÖÃÏß³Ì//
 void HandleClient_photoset(SOCKET client_server)
 {
+	std::string new_online_user_account;
 	//µÚËÄ¸öÅĞ¶Ï//
 	//¿Í»§¶ËÍ·ÏñÉèÖÃÑ¡ÔñÅĞ¶Ï È·¶¨»òÈ¡Ïû //
 	int len_four = 0;//½ÓÊÕ¿Í»§¶ËÍ·ÏñÉèÖÃºóµÄÑ¡Ôñ£¬¼ÌĞø »ò È¡Ïû//
@@ -1460,10 +1793,10 @@ void HandleClient_photoset(SOCKET client_server)
 		}
 		else if (wcscmp(wreceived_five.c_str(), L"È·¶¨") == 0)//×¢²á³É¹¦È·¶¨Ïß³Ì//
 		{
-			std::lock_guard<std::mutex>lk(users_mutex);
-			users_update_signal = true;
-			users_cv.notify_one();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
-
+			//std::lock_guard<std::mutex>lk(users_mutex);
+			//users_update_signal = true;
+			//users_cv.notify_one();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
+			//update_new_users_list();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
 			int x = 0;
 			receivedData regData;//½á¹¹Ìå£¬½ÓÊÜÍêÕûÊı¾İ//
 			while (true)
@@ -1589,8 +1922,8 @@ void HandleClient_photoset(SOCKET client_server)
 					break;
 				}
 			}
+			update_new_users_list();//Í¨Öªº¯ÊıÖØĞÂ¼ÓÔØÊı¾İ¿âÀïµÄÓÃ»§êÇ³ÆºÍÍ·Ïñ//
 			//Ìø³ö×¢²áÏß³Ì//
-
 			//ÅĞ¶Ï¾ßÌåÖ´ĞĞÄÄÖÖÏß³Ì,µÇÂ¼»ò×¢²á//
 			int recv_len = 0;
 			recv(client_server, (char*)&recv_len, sizeof(recv_len), 0);//½ÓÊÕÏûÏ¢³¤¶È//
@@ -1624,7 +1957,7 @@ void HandleClient_photoset(SOCKET client_server)
 			else if (wcscmp(wrecvchar.c_str(), L"µÇÂ¼") == 0)//µÇÂ¼Ïß³Ì//
 			{
 				//MessageBox(NULL, L"½ÓÊÕµ½µÇÂ¼ÏûÏ¢£¬¼´½«ÆôÓÃµÇÂ¼Ïß³Ì", L"QQ", MB_ICONINFORMATION);
-				std::thread(HandleClient_login, client_server).detach();//´´½¨µÇÂ¼Ïß³Ì//
+				std::thread(HandleClient_login, client_server,new_online_user_account).detach();//´´½¨µÇÂ¼Ïß³Ì//
 			}
 			else
 			{
@@ -1860,15 +2193,117 @@ bool delete_user_by_account_password(const char* account, const char* password, 
 
 
 
+// ÒÀ¾İÓÃ»§ÕËºÅ²éÕÒÓÃ»§Í¼Æ¬Êı¾İ
+bool find_imgdata_according_to_account(const char* account, MYSQL* conn_3,receivedData& mydata)
+{
+	int con_num = 0;
+	while (!mysql_real_connect(conn_3, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))//Á¬½ÓÊı¾İ¿â//
+	{
+		//MessageBox(NULL, L"Á¬½ÓÊı¾İ¿âÊ§°Ü", L"QQ", MB_ICONERROR);
+		con_num++;
+		if (con_num > 3)
+		{
+			return false;
+		}
+	}
+
+	// 1. Ô¤´¦Àí SQL Óï¾ä
+	const char* sql = "SELECT ImgData FROM users WHERE account=? LIMIT 1";
+	MYSQL_STMT* stmt = mysql_stmt_init(conn_3);//»ñÈ¡Ô¤´¦ÀíÓï¾ä¾ä±ú//
+	if (!stmt)
+	{
+		MessageBox(NULL, L"Êı¾İ¿âÔ¤´¦ÀíÓï¾ä¾ä±ú³õÊ¼»¯Ê§°Ü", L"QQ", MB_ICONERROR);
+		return false;
+	}
+	if (mysql_stmt_prepare(stmt, sql, strlen(sql)))//½«SQLÓï¾ä×ª»»ÎªÊı¾İ¿âÄÚ²¿½á¹¹//
+	{
+		MessageBox(NULL, L"SQLÓï¾ä×ª»»ÎªÊı¾İ¿âÄÚ²¿½á¹¹Ê§°Ü", L"QQ", MB_ICONERROR);
+		mysql_stmt_close(stmt);//ÊÍ·ÅÔ¤´¦ÀíÓï¾ä¾ä±ú//
+		return false;
+	}
+	// 2. °ó¶¨ÊäÈë²ÎÊı
+	MYSQL_BIND bind[1];
+	memset(bind, 0, sizeof(bind));
+
+	bind[0].buffer_type = MYSQL_TYPE_STRING;
+	bind[0].buffer = (char*)account;
+	bind[0].buffer_length = strlen(account);
 
 
+	if (mysql_stmt_bind_param(stmt, bind))//°ó¶¨²ÎÊı//
+	{
+		MessageBox(NULL, L"°ó¶¨²ÎÊıÊ§°Ü", L"QQ", MB_ICONERROR);
+		mysql_stmt_close(stmt);
+		return false;
+	}
 
+	// 3. Ö´ĞĞ
+	if (mysql_stmt_execute(stmt))
+	{
+		MessageBox(NULL, L"Ö´ĞĞSQLÓï¾äÊ§°Ü", L"QQ", MB_ICONERROR);
+		mysql_stmt_close(stmt);
+		return false;
+	}
 
+	//4.°ó¶¨½á¹û
+	unsigned long img_length = 0;
+	bool is_null = false;
+	bool error = false;
+	
+	BYTE img_buffer[1];
+	MYSQL_BIND bind_result[1];
+	memset(bind_result,0,sizeof(bind_result));
+	bind_result[0].buffer_type = MYSQL_TYPE_BLOB;
+	bind_result[0].buffer = img_buffer;
+	bind_result[0].buffer_length = sizeof(img_buffer);//ÔÊĞíĞ´ÈëµÄ×î´ó×Ö½ÚÊı
+	bind_result[0].length = &img_length;//Êµ¼ÊĞ´ÈëµÄ×Ö½ÚÊı
+	bind_result[0].is_null = &is_null;
+	bind_result[0].error = &error;
 
+	if (mysql_stmt_bind_result(stmt, bind_result))
+	{
+		MessageBox(NULL, L"°ó¶¨½á¹ûÊ§°Ü", L"QQ", MB_ICONERROR);
+		mysql_stmt_close(stmt);
+		return false;
+	}
 
-
-
-
+	//5.»ñÈ¡½á¹û
+	if (mysql_stmt_store_result(stmt))
+	{
+		MessageBox(NULL,L"´¢´æ½á¹ûÊ§°Ü",L"QQ",MB_ICONERROR);
+		mysql_stmt_close(stmt);
+		return false;
+	}
+	int ret = mysql_stmt_fetch(stmt);
+	if (ret == 0 || ret == MYSQL_DATA_TRUNCATED)//³É¹¦»ñÈ¡½á¹û
+	{
+		//»ñÈ¡Í¼Æ¬Êı¾İ³¤¶È
+		if (!is_null && img_length > 0)
+		{
+			mydata.imgData.resize(img_length);
+			//ÖØĞÂÉèÖÃbind_resultÌî³ämydata.imgData
+			bind_result[0].buffer = mydata.imgData.data();
+			bind_result[0].buffer_length = img_length;
+			//ÔÙ´Î»ñÈ¡ÍêÕûÊı¾İ
+			if (mysql_stmt_fetch_column(stmt, &bind_result[0], 0, 0))
+			{
+				MessageBox(NULL,L"»ñÈ¡Í¼Æ¬Êı¾İÊ§°Ü",L"QQ",MB_ICONERROR);
+				mysql_stmt_free_result(stmt);//ÏÈÊÍ·Å±¾µØ½á¹û¼¯»º³åÇø
+				mysql_stmt_close(stmt);
+				return false;
+			}
+		}
+		else
+		{
+			//Ã»ÓĞÍ·Ïñ
+			mydata.imgData.clear();
+			return false;
+		}
+	}
+	mysql_stmt_free_result(stmt);
+	mysql_stmt_close(stmt);
+	return true;
+}
 
 
 
@@ -1877,7 +2312,7 @@ bool delete_user_by_account_password(const char* account, const char* password, 
 //ÓÃ»§êÇ³ÆºÍÍ·Ïñ²éÑ¯Óï¾ä//
 void LoadUsersFromDB(MYSQL* conn)
 {
-	while (true)
+	while (true)//¼ÓÔØÓÃ»§ÕËºÅ¡¢êÇ³ÆºÍÍ·ÏñĞÅÏ¢//
 	{
 		std::unique_lock<std::mutex>lk(users_mutex);
 		//µÈ´ıĞÅºÅ±»ÉèÖÃÎªtrue//
@@ -1929,16 +2364,191 @@ void LoadUsersFromDB(MYSQL* conn)
 }
 
 
+//´¦ÀíÓÃ»§Í·ÏñÊı¾İµÄ¼ÓÔØÏß³Ì
+void load_user_img(SOCKET client_server,std::string str_account)
+{
+	//½ÓÊÕ¿Í»§¶Ë¼ÓÔØÓÃ»§Í¼Æ¬Êı¾İµÄÇëÇó
+	int request_len = 0;
+	recv(client_server, (char*)&request_len, sizeof(request_len), 0);
+	std::string request_str(request_len, '\0');
+	recv(client_server, &request_str[0], request_len, 0);
+	int wrequest_len = MultiByteToWideChar(CP_UTF8, 0, request_str.c_str(), request_str.size(), NULL, 0);
+	std::wstring request_wstr(wrequest_len, 0);
+	MultiByteToWideChar(CP_UTF8, 0, request_str.c_str(), request_str.size(), &request_wstr[0], wrequest_len);
 
+	if (wcscmp(request_wstr.c_str(), L"ÇëÇó¼ÓÔØµÇÂ¼ÓÃ»§Í·Ïñ") == 0)
+	{
+		int user_img = 0;//Í¼Æ¬Êı¾İµÄ´óĞ¡
+		BYTE* user_imgage;//´¢´æÍ¼Æ¬Êı¾İµÄÊı×é
+		MessageBox(NULL, L"³É¹¦½ÓÊÕÓÃ»§Í¼Æ¬Êı¾İµÄÇëÇó", L"QQ", MB_ICONINFORMATION);
+		//ÓÃ¸ÃÓÃ»§µÄÕËºÅÔÚÊı¾İ¿âÀïËÑË÷¸ÃÓÃ»§µÄÍ¼Æ¬Êı¾İ
+		receivedData my_data2;
+		std::string acc = str_account;
+		if (acc.back() == '\0')
+		{
+			acc.pop_back();
+		}
+		bool loadImg = true;
+		MYSQL* conn_3 = mysql_init(NULL);
+		loadImg = find_imgdata_according_to_account(acc.c_str(), conn_3, my_data2);
+		mysql_close(conn_3);
+		if (!loadImg)
+		{
+			return;
+		}
+		int img_len = my_data2.imgData.size();
+		send(client_server, (char*)&img_len, sizeof(img_len), 0);//ÏÈ·¢Í¼Æ¬Êı¾İ³¤¶È
+		send(client_server, (char*)my_data2.imgData.data(), img_len, 0);//ºó·¢Í¼Æ¬Êı¾İÄÚÈİ
+		MessageBox(NULL,L"ÒÑ¾­³É¹¦½«ÓÃ»§µÄÍ·ÏñÊı¾İ·¢³ö",L"QQ",MB_ICONINFORMATION);
+	}
+	else
+	{
+		return;
+	}
+}
 
+//´ÓÊı¾İ¿â¼ÓÔØÓÃ»§¸öÈËĞÅÏ¢
+bool load_personal_information(std::string new_online_user_account, my_user_information &my_user_infor_edit, MYSQL* conn_2)
+{
+	int con_num = 0;
+	while (!mysql_real_connect(conn_2, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))//Á¬½ÓÊı¾İ¿â//
+	{
+		//MessageBox(NULL, L"Á¬½ÓÊı¾İ¿âÊ§°Ü", L"QQ", MB_ICONERROR);
+		con_num++;
+		if (con_num > 3)
+		{
+			return false;
+		}
+	}
+	
+	//MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦Á¬½ÓÊı¾İ¿â", L"QQ", MB_ICONINFORMATION);
 
+	// 1. Ô¤´¦Àí SQL ²éÑ¯
+	const char* sql = "SELECT password,nickname,gender,age,signature FROM users WHERE account=? LIMIT 1";//¶¨ÒåÒ»¸öSQL²éÑ¯Óï¾äµÄ×Ö·û´®£¬×î¶à·µ»ØÒ»Ìõ¼ÇÂ¼//
+	MYSQL_STMT* stmt = mysql_stmt_init(conn_2);//³õÊ¼»¯Ò»¸öÔ¤´¦ÀíÓï¾ä¾ä±ú£¬connÊÇÊı¾İ¿âÁ¬½Ó¾ä±ú//
+	if (!stmt)
+	{
+		MessageBox(NULL, L"Êı¾İ¿âÔ¤´¦ÀíÓï¾ä¾ä±ú³õÊ¼»¯Ê§°Ü", L"QQ", MB_ICONERROR);
+		return false;
+	}
+	//MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦³õÊ¼»¯Ò»¸öÔ¤´¦ÀíÓï¾ä¾ä±ú", L"QQ", MB_ICONINFORMATION);
 
+	if (mysql_stmt_prepare(stmt, sql, strlen(sql)))//°ÑSQLÓï¾ä´Ó×Ö·û´®×ª»»ÎªÊı¾İ¿âÄÚ²¿½á¹¹£¬Ìá¸ßÖ´ĞĞĞ§ÂÊ// 
+	{
+		MessageBox(NULL, L"SQLÓï¾ä×ª»»ÎªÊı¾İ¿âÄÚ²¿½á¹¹Ê§°Ü", L"QQ", MB_ICONERROR);
+		mysql_stmt_close(stmt);
+		return false;
+	}
+	//MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦½«SQLÓï¾ä×ª»¯ÎªÊı¾İ¿âÄÚ²¿½á¹¹", L"QQ", MB_ICONINFORMATION);
 
+	// 2. °ó¶¨ÊäÈë²ÎÊı
+	MYSQL_BIND bind[1];//²ÎÊı¸öÊıÎª1//
+	memset(bind, 0, sizeof(bind));
 
+	bind[0].buffer_type = MYSQL_TYPE_STRING;
+	bind[0].buffer =(void*)new_online_user_account.c_str();
+	bind[0].buffer_length =(unsigned long)new_online_user_account.size();
 
+	if (mysql_stmt_bind_param(stmt, bind))//°ó¶¨²ÎÊı//
+	{
+		MessageBox(NULL, L"°ó¶¨²ÎÊıÊ§°Ü", L"QQ", MB_ICONERROR);
+		mysql_stmt_close(stmt);
+		return false;
+	}
+	//MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦°ó¶¨²ÎÊı", L"QQ", MB_ICONINFORMATION);
 
+	// 3. °ó¶¨½á¹û£¨Êä³ö»º³åÇø£©
+	char* password_buf = new char[65];
+	char* nickname_buf = new char[65];
+	char* gender_buf = new char[9];
+	char* age_buf = new char[9];
+	char* signature_buf = new char[257];  // ¼ÙÉè×î´ó256
 
-void HandleClient_login(SOCKET client_server)//µÇÂ¼´¦ÀíÏß³Ì//
+	unsigned long lens[5] = { 0 };//ÓÃÓÚ´¢´æÃ¿¸ö×Ö¶ÎµÄÊµ¼Ê³¤¶È//
+	bool is_null[5] = { 0 };//ÓÃÓÚ±êÊ¶Ã¿¸ö×Ö¶ÎÊÇ·ñÎªNULL//
+
+	// 4. °ó¶¨½á¹û
+	MYSQL_BIND result_bind[5];//²ÎÊı¸öÊıÎª1//
+	memset(result_bind, 0, sizeof(result_bind));
+
+	result_bind[0].buffer_type = MYSQL_TYPE_STRING;
+	result_bind[0].buffer = password_buf;
+	result_bind[0].buffer_length = 65;
+	result_bind[0].is_null = &is_null[0];//³õÊ¼»¯//
+	result_bind[0].length = &lens[0];//³õÊ¼»¯//
+
+	result_bind[1].buffer_type = MYSQL_TYPE_STRING;
+	result_bind[1].buffer = nickname_buf;
+	result_bind[1].buffer_length = 65;
+	result_bind[1].is_null = &is_null[1];//³õÊ¼»¯//
+	result_bind[1].length = &lens[1];//³õÊ¼»¯//
+
+	result_bind[2].buffer_type = MYSQL_TYPE_STRING;
+	result_bind[2].buffer = gender_buf;
+	result_bind[2].buffer_length = 9;
+	result_bind[2].is_null = &is_null[2];//³õÊ¼»¯//
+	result_bind[2].length = &lens[2];//³õÊ¼»¯//
+
+	result_bind[3].buffer_type = MYSQL_TYPE_STRING;
+	result_bind[3].buffer = age_buf;
+	result_bind[3].buffer_length = 9;
+	result_bind[3].is_null = &is_null[3];//³õÊ¼»¯//
+	result_bind[3].length = &lens[3];//³õÊ¼»¯//
+
+	result_bind[4].buffer_type = MYSQL_TYPE_STRING;
+	result_bind[4].buffer = signature_buf;
+	result_bind[4].buffer_length = 257;
+	result_bind[4].is_null = &is_null[4];//³õÊ¼»¯//
+	result_bind[4].length = &lens[4];//³õÊ¼»¯//
+
+	// 3. Ö´ĞĞ
+	if (mysql_stmt_execute(stmt))
+	{
+		MessageBox(NULL, L"Ö´ĞĞSQLÓï¾äÊ§°Ü", L"QQ", MB_ICONERROR);
+		mysql_stmt_close(stmt);
+		return false;
+	}
+	//MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­Ö´ĞĞÁËSQLÓï¾ä", L"QQ", MB_ICONINFORMATION);
+
+	if (mysql_stmt_bind_result(stmt, result_bind))//°ó¶¨½á¹û²ÎÊı//
+	{
+		MessageBox(NULL, L"°ó¶¨½á¹û²ÎÊıÊ§°Ü", L"QQ", MB_ICONERROR);
+		mysql_stmt_close(stmt);
+		return false;
+	}
+	//MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦°ó¶¨½á¹û²ÎÊı", L"QQ", MB_ICONINFORMATION);
+
+	// 5. »ñÈ¡½á¹û
+	bool found = false;
+	if (mysql_stmt_store_result(stmt) == 0) //°Ñ½á¹û¼¯»º³åµ½±¾µØ//
+	{
+		//MessageBox(NULL, L"·şÎñÆ÷³É¹¦°Ñ½á¹û»º³åµ½±¾µØ", L"QQ", MB_ICONINFORMATION);
+		if (mysql_stmt_fetch(stmt) == 0) // ÓĞÒ»Ìõ¼ÇÂ¼£¬±äÁ¿»á±»°ó¶¨Äã°ó¶¨µÄ±äÁ¿//
+		{
+			//MessageBox(NULL, L"·şÎñÆ÷³É¹¦²éÑ¯µ½½á¹û", L"QQ", MB_ICONINFORMATION);
+			found = true;
+			my_user_infor_edit.password = (!is_null[0]) ? std::string(password_buf, lens[0]) : "";
+			my_user_infor_edit.nickname = (!is_null[1]) ? std::string(nickname_buf, lens[1]) : "";
+			my_user_infor_edit.gender = (!is_null[2]) ? std::string(gender_buf, lens[2]) : "";
+			my_user_infor_edit.age = (!is_null[3]) ? std::string(age_buf, lens[3]) : "";
+			my_user_infor_edit.signature = (!is_null[4]) ? std::string(signature_buf, lens[4]) : "";
+		}
+	}
+	else
+	{
+		MessageBox(NULL, L"·şÎñÆ÷ÎŞ·¨°Ñ½á¹û»º³åµ½±¾µØ", L"QQ", MB_ICONERROR);
+	}
+	delete[] password_buf;
+	delete[] nickname_buf;
+	delete[] gender_buf;
+	delete[] age_buf;
+	delete[] signature_buf;
+	mysql_stmt_free_result(stmt);
+	mysql_stmt_close(stmt);
+	return found;
+}
+
+void HandleClient_login(SOCKET client_server,std::string new_online_user_account)//µÇÂ¼´¦ÀíÏß³Ì//
 {
 	//ÏÈ½ÓÊÕ¿Í»§¶ËÊÇÒªÖ´ĞĞÈ·¶¨»¹ÊÇÈ¡Ïû²Ù×÷//
 	int utf8_len = 0;
@@ -1981,22 +2591,56 @@ void HandleClient_login(SOCKET client_server)//µÇÂ¼´¦ÀíÏß³Ì//
 		//ÔÚÊı¾İ¿â²éÕÒ£¬²é¿´¸ÃÓÃ»§µÄÕËºÅºÍÃÜÂëÊÇ·ñÒÑ¾­×¢²á//
 		if (is_account_registered(str_account.c_str(), str_password.c_str(), conn,my_data))//²éÑ¯µ½¸ÃÕËºÅÃÜÂëÒÑ¾­×¢²á//
 		{
-			MessageBox(NULL, L"²éÑ¯µ½¸ÃÕËºÅÃÜÂëÒÑ¾­×¢²á", L"QQ", MB_ICONINFORMATION);
+
+			//MessageBox(NULL, L"²éÑ¯µ½¸ÃÕËºÅÃÜÂëÒÑ¾­×¢²á", L"QQ", MB_ICONINFORMATION);
+			//¼ÇÂ¼ĞÂµÄµÇÂ¼ÓÃ»§ÕËºÅ
+			new_online_user_account = str_account;//º¬'\0'
+
+		
+			
+
+            //½«ÓÃ»§¼ÇÂ¼ÎªÔÚÏßÓÃ»§//
+			User_account users_accounts;
+			users_accounts.account = str_account;
+			{
+				std::lock_guard<std::mutex>lock(g_onlineUsersMutex);
+				g_onlineUsers.push_back(users_accounts);
+			}
+
+			//¸üĞÂÓÃ»§ÁĞ±íµÄÔÚÏß×´Ì¬//
+			{
+				std::lock_guard<std::mutex> lk(users_mutex);//ÉÏËø
+				users_update_signal = true;      // ÉèÖÃÌõ¼ş
+				users_cv.notify_one();           // »½ĞÑÒ»¸öµÈ´ıÏß³Ì
+			}
+
+			//Í¨ÖªÀëÏßÓÃ»§ÔÚÏß×´Ì¬ÊÇ·ñ¸üĞÂ
+			{
+				std::lock_guard<std::mutex>lock_users_online(users_online_mutex);//ÉÏËø
+				users_online_update_signal = true;//ÉèÖÃÌõ¼ş
+				users_online_cv.notify_one();//»½ĞÑÒ»¸öµÈ´ıÏß³Ì
+			}
+
+			//±£´æsocketºÍ¶ÔÓ¦µÄÓÃ»§ÕËºÅ//
+			User_online user_online;
+		    std::lock_guard<std::mutex>lock(g_users_online_Mutex);
+			user_online.socket = client_server;
+			user_online.account = str_account;//ÕËºÅº¬'\0'ÖÕÖ¹·û//
+			g_users_online.push_back(user_online);//½«ÓÃ»§ÕËºÅºÍsocket±£´æµ½ÔÚÏßÓÃ»§ÁĞ±íÀï//
+
+
 			std::wstring recv_back = L"sucess";
 			int utf8_len = WideCharToMultiByte(CP_UTF8, 0, recv_back.c_str(), recv_back.size() + 1, NULL, 0, NULL, NULL);//×ª»»Îªutf8ËùĞèµÄ¿Õ¼ä//
 			std::string utf8str(utf8_len, 0);//·ÖÅä¿Õ¼ä//
 			WideCharToMultiByte(CP_UTF8, 0, recv_back.c_str(), recv_back.size() + 1, &utf8str[0], utf8_len, NULL, NULL);//Êµ¼Ê×ª»»//
 			send(client_server, (char*)&utf8_len, sizeof(utf8_len), 0);//ÏÈ·¢³¤¶È//
 			send(client_server, utf8str.c_str(), utf8_len, 0);//ºó·¢ÄÚÈİ//
-			//½øÈëµÇÂ¼Ö÷Ò³ÃæÖ®ºóµÄÏß³Ì//
-			MessageBox(NULL, L"¼´½«½øÈëµÇÂ¼½çÃæµÄ´¦ÀíÏß³Ì", L"QQ", MB_ICONINFORMATION);
-			std::thread(Handlelogin_pro,client_server,my_data).detach();
+			
 			
 
-
-
-
-
+			//½øÈëµÇÂ¼Ö÷Ò³ÃæÖ®ºóµÄÏß³Ì//
+			//MessageBox(NULL, L"¼´½«½øÈëµÇÂ¼½çÃæµÄ´¦ÀíÏß³Ì", L"QQ", MB_ICONINFORMATION);
+			std::thread(Handlelogin_pro,client_server,my_data,new_online_user_account).detach();
 		}
 		else
 		{
@@ -2007,7 +2651,7 @@ void HandleClient_login(SOCKET client_server)//µÇÂ¼´¦ÀíÏß³Ì//
 			WideCharToMultiByte(CP_UTF8, 0, recv_back.c_str(), recv_back.size() + 1, &utf8str[0], utf8_len, NULL, NULL);//Êµ¼Ê×ª»»//
 			send(client_server, (char*)&utf8_len, sizeof(utf8_len), 0);//ÏÈ·¢³¤¶È//
 			send(client_server, utf8str.c_str(), utf8_len, 0);//ºó·¢ÄÚÈİ//
-			std::thread(HandleClient_login, client_server).detach();//µÇÂ¼´¦ÀíÏß³Ì//
+			std::thread(HandleClient_login, client_server,new_online_user_account).detach();//µÇÂ¼´¦ÀíÏß³Ì//
 		}
 	}
 	else if (wcscmp(wide_str.c_str(), L"È¡Ïû") == 0)
@@ -2045,7 +2689,7 @@ void HandleClient_login(SOCKET client_server)//µÇÂ¼´¦ÀíÏß³Ì//
 		else if (wcscmp(wrecvchar.c_str(), L"µÇÂ¼") == 0)//µÇÂ¼Ïß³Ì//
 		{
 			MessageBox(NULL, L"½ÓÊÕµ½µÇÂ¼ÏûÏ¢£¬¼´½«ÆôÓÃµÇÂ¼Ïß³Ì", L"QQ", MB_ICONINFORMATION);
-			std::thread(HandleClient_login, client_server).detach();//´´½¨µÇÂ¼Ïß³Ì//
+			std::thread(HandleClient_login, client_server,new_online_user_account).detach();//´´½¨µÇÂ¼Ïß³Ì//
 		}
 		else
 		{
@@ -2069,10 +2713,194 @@ std::wstring strTowstr(std::string str)
 }
 
 
+// ´«Èë²ÎÊı£ºÕËºÅ¡¢Í¼Æ¬Êı¾İºÍ³¤¶È
+bool update_user_img(const std::string& account, const BYTE* imgData, int imgLen, MYSQL* conn)
+{
+	const char* sql = "UPDATE users SET imgData=? WHERE account=? LIMIT 1";
+	MYSQL_STMT* stmt = mysql_stmt_init(conn);
+	if (!stmt) return false;
+	if (mysql_stmt_prepare(stmt, sql, strlen(sql)))
+	{
+		mysql_stmt_close(stmt);
+		return false;
+	}
+
+	MYSQL_BIND bind[2];
+	memset(bind, 0, sizeof(bind));
+	// Í·ÏñBLOB
+	bind[0].buffer_type = MYSQL_TYPE_LONG_BLOB;
+	bind[0].buffer = (void*)imgData;
+	bind[0].buffer_length = imgLen;
+	// ÕËºÅ
+	bind[1].buffer_type = MYSQL_TYPE_STRING;
+	bind[1].buffer = (void*)account.c_str();
+	bind[1].buffer_length = account.length();
+
+	if (mysql_stmt_bind_param(stmt, bind))
+	{
+		mysql_stmt_close(stmt); 
+		return false;
+	}
+	bool ok = (mysql_stmt_execute(stmt) == 0);
+	mysql_stmt_close(stmt);
+	return ok;
+}
+
+void send_personal_information_to_client(SOCKET client_server,std::string new_online_user_account)
+{
+	//´ÓÊı¾İ¿â¼ÓÔØÓÃ»§ĞÅÏ¢
+	my_user_information my_user_infor_edit;
+	std::string account_new = new_online_user_account;
+	if (!account_new.empty() && account_new.back() == '\0')
+	{
+		account_new.pop_back();
+	}
+	//½«¼ÓÔØµÄ¸öÈËĞÅÏ¢·¢ËÍ¸ø¿Í»§¶Ë
+	MYSQL* conn_2 = mysql_init(NULL);
+	if (load_personal_information(account_new, my_user_infor_edit, conn_2))
+	{
+		mysql_close(conn_2);
+		//½á¹¹ÌåÒÑ¾­³É¹¦¼ÓÔØÓÃ»§µÄ¸öÈËĞÅÏ¢
+		MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦¼ÓÔØËùÓĞ¸öÈËĞÅÏ¢", L"QQ", MB_ICONINFORMATION);
+		//·¢ËÍÃÜÂë
+		int password_buf_len = my_user_infor_edit.password.size();
+		send(client_server, (char*)&password_buf_len, sizeof(password_buf_len), 0);
+		send(client_server, my_user_infor_edit.password.c_str(), password_buf_len, 0);//²»º¬'\0'
+
+		//·¢ËÍêÇ³Æ
+		int nickname_buf_len = my_user_infor_edit.nickname.size();
+		send(client_server, (char*)&nickname_buf_len, sizeof(nickname_buf_len), 0);
+		send(client_server, my_user_infor_edit.nickname.c_str(), nickname_buf_len, 0);//²»º¬'\0'
+
+		//·¢ËÍĞÔ±ğ
+		int gender_buf_len = my_user_infor_edit.gender.size();
+		send(client_server, (char*)&gender_buf_len, sizeof(gender_buf_len), 0);
+		send(client_server, my_user_infor_edit.gender.c_str(), gender_buf_len, 0);//²»º¬'\0'
+
+		//·¢ËÍÄêÁä
+		int age_buf_len = my_user_infor_edit.age.size();
+		send(client_server, (char*)&age_buf_len, sizeof(age_buf_len), 0);
+		send(client_server, my_user_infor_edit.age.c_str(), age_buf_len, 0);//²»º¬'\0'
+
+		//·¢ËÍ¸öĞÔÇ©Ãû
+		int signature_buf_len = my_user_infor_edit.signature.size();
+		send(client_server, (char*)&signature_buf_len, sizeof(signature_buf_len), 0);
+		send(client_server, my_user_infor_edit.signature.c_str(), signature_buf_len, 0);//²»º¬'\0'
+
+		MessageBox(NULL, L"ÒÑ³É¹¦½«ÓÃ»§¸öÈËĞÅÏ¢·¢¸ø¿Í»§¶Ë", L"QQ", MB_ICONINFORMATION);
+	}
+	else
+	{
+		mysql_close(conn_2);
+		MessageBox(NULL, L"ÎŞ·¨½«ÓÃ»§¸öÈËĞÅÏ¢·¢¸ø¿Í»§¶Ë", L"QQ", MB_ICONERROR);
+		return;
+	}
+
+}
+
+
+int recv_all_information(SOCKET socket,std::string &user_infor)
+{
+	int buf_len = 0;
+	recv(socket,(char*)&buf_len,sizeof(buf_len),0);//ÏÈ½ÓÊÕ³¤¶È
+	int r = 0;
+	int sum = 0;
+	std::string str(buf_len, '\0');
+	while (sum < buf_len)
+	{
+		r = recv(socket,&str[0]+sum,buf_len-sum,0);
+		if (r > 0)
+		{
+			sum += r;
+		}
+		if (sum == buf_len)
+		{
+			user_infor = str;//Ìî³äĞÅÏ¢
+			return sum;
+		}
+
+	}
+}
+
+
+// ¸üĞÂÓÃ»§ĞÅÏ¢
+bool update_user_information(const std::string& account,MYSQL* conn_4, my_user_information& new_information)
+{
+	//Á¬½ÓÊı¾İ¿â
+	int con_num = 0;
+	while (!mysql_real_connect(conn_4, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))//Á¬½ÓÊı¾İ¿â//
+	{
+		MessageBox(NULL, L"Á¬½ÓÊı¾İ¿âÊ§°Ü", L"QQ", MB_ICONERROR);
+		con_num++;
+		if (con_num > 3)
+		{
+			return false;
+		}
+	}
+
+	const char* sql = "UPDATE users SET password=?,nickname=?,gender=?,age=?,signature=? WHERE account=? LIMIT 1";
+	MYSQL_STMT* stmt = mysql_stmt_init(conn_4);
+	if (!stmt) return false;
+	if (mysql_stmt_prepare(stmt, sql, strlen(sql)))
+	{
+		mysql_stmt_close(stmt);
+		return false;
+	}
+
+	MYSQL_BIND bind[6]; // 6¸ö²ÎÊı
+	memset(bind, 0, sizeof(bind));
+
+	// 1. password
+	bind[0].buffer_type = MYSQL_TYPE_STRING;
+	bind[0].buffer = (void*)new_information.password.c_str();
+	bind[0].buffer_length = new_information.password.length();
+
+	// 2. nickname
+	bind[1].buffer_type = MYSQL_TYPE_STRING;
+	bind[1].buffer = (void*)new_information.nickname.c_str();
+	bind[1].buffer_length = new_information.nickname.length();
+
+	// 3. gender
+	bind[2].buffer_type = MYSQL_TYPE_STRING;
+	bind[2].buffer = (void*)new_information.gender.c_str();
+	bind[2].buffer_length = new_information.gender.length();
+
+	// 4. age
+	bind[3].buffer_type = MYSQL_TYPE_STRING;
+	bind[3].buffer = (void*)new_information.age.c_str();
+	bind[3].buffer_length = new_information.age.length();
+
+	// 5. signature
+	bind[4].buffer_type = MYSQL_TYPE_STRING;
+	bind[4].buffer = (void*)new_information.signature.c_str();
+	bind[4].buffer_length = new_information.signature.length();
+
+	// 6. account (WHEREÌõ¼ş)
+	bind[5].buffer_type = MYSQL_TYPE_STRING;
+	bind[5].buffer = (void*)account.c_str();
+	bind[5].buffer_length = account.length();
+
+
+	if (mysql_stmt_bind_param(stmt, bind))
+	{
+		mysql_stmt_close(stmt);
+		return false;
+	}
+	bool ok = (mysql_stmt_execute(stmt) == 0);
+	mysql_stmt_close(stmt);
+	return ok;
+}
+
+
 //µÇÂ¼½çÃæ´¦ÀíÏß³Ì//
-void Handlelogin_pro(SOCKET client_server,receivedData my_data)//µÇÂ¼½çÃæ´¦ÀíÏß³Ì//
+void Handlelogin_pro(SOCKET client_server,receivedData my_data,std::string new_online_user_account)//µÇÂ¼½çÃæ´¦ÀíÏß³Ì//
 {
 	MessageBox(NULL, L"³É¹¦½øÈëµÇÂ¼½çÃæµÄ´¦ÀíÏß³Ì", L"QQ", MB_ICONINFORMATION);
+	 
+	//¼ÓÔØÓÃ»§Í·ÏñÊı¾İÏß³Ì
+	std::string str_account = new_online_user_account;
+	//std::thread(load_user_img, client_server, str_account).detach();
+	load_user_img(client_server, str_account);
 
 	int len = 0;
 	recvAll(client_server, (char*)&len, sizeof(len), 0);//ÏÈ½ÓÊÕ³¤¶È//
@@ -2092,13 +2920,15 @@ void Handlelogin_pro(SOCKET client_server,receivedData my_data)//µÇÂ¼½çÃæ´¦ÀíÏß³
 	//½øĞĞ½ÓÊÜÄÚÈİÅĞ¶Ï//
 	if (wcscmp(wstr.c_str(),L"·şÎñÆ÷")==0)
 	{
+
 		//½ÓÊÕ¿Í»§¶Ë·şÎñÆ÷½»»¥Ê±µÄ°´Å¥ĞÅÏ¢//
 		while (true)
 		{
+		
 			int len_utf8 = 0;
 			recvAll(client_server, (char*)&len_utf8, sizeof(len_utf8), 0);//ÏÈ½ÓÊÕ³¤¶È//
 			//MessageBox(NULL, L"½ÓÊÕµÇÂ¼½çÃæ¿Í»§¶Ë·¢ËÍµÄ³¤¶ÈÏûÏ¢³É¹¦", L"QQ", MB_ICONINFORMATION);
-			if (len_utf8<= 0)
+			if (len_utf8 <= 0)
 			{
 				MessageBox(NULL, L"½ÓÊÕµÇÂ¼½çÃæ°´Å¥ĞÅÏ¢³¤¶ÈÊ§°Ü", L"QQ", MB_ICONERROR);
 				return;
@@ -2150,10 +2980,10 @@ void Handlelogin_pro(SOCKET client_server,receivedData my_data)//µÇÂ¼½çÃæ´¦ÀíÏß³
 				wchar_t timeBuffer_one[64];
 				wcsftime(timeBuffer_one, sizeof(timeBuffer_one) / sizeof(wchar_t), L"%Y-%m-%d %H:%M:%S", &tm_one);
 				//MessageBox(NULL, L"ÒÑ¾­×¼±¸ºÃÁËÊ±¼ä×Ö¶Î", L"QQ", MB_ICONINFORMATION);
-				
-				std::wstring msg_one=L"[";
-				msg_one+=timeBuffer_one;
-				msg_one+= L"][";
+
+				std::wstring msg_one = L"[";
+				msg_one += timeBuffer_one;
+				msg_one += L"][";
 				std::wstring w = strTowstr(my_data.nickname);
 				if (!w.empty() && w.back() == L'\0')//È¥³ı±êÊ¶×Ö·û´®µÄÖÕÖ¹·û'\0',²Å¿ÉÒÔÆ´½Ó²¢ÏÔÊ¾ºóÃæµÄÄÚÈİ//
 				{
@@ -2172,15 +3002,15 @@ void Handlelogin_pro(SOCKET client_server,receivedData my_data)//µÇÂ¼½çÃæ´¦ÀíÏß³
 				//MessageBox(NULL, msg_one.c_str(), L"QQ", MB_ICONINFORMATION);
 				//MessageBox(NULL, L"ÒÑ¾­³É¹¦Æ´½ÓºÃ¿Í»§¶Ë·¢À´µÄÏûÏ¢×Ö¶Î", L"QQ", MB_ICONINFORMATION);
 				//MessageBox(NULL, L"¼´½«×¼±¸½«ÏûÏ¢¼ÓÈë¶ÓÁĞ", L"QQ", MB_ICONINFORMATION);
-				
+
 				//½«½ÓÊÕµ½µÄÄÚÈİ´¦ÀíºóÔÙ·¢»ØÈ¥//
-				int u_len = WideCharToMultiByte(CP_UTF8,0,msg_one.c_str(),msg_one.size()+1, NULL, 0, NULL, NULL);//¼ÆËã×ª»»³¤¶È//
+				int u_len = WideCharToMultiByte(CP_UTF8, 0, msg_one.c_str(), msg_one.size() + 1, NULL, 0, NULL, NULL);//¼ÆËã×ª»»³¤¶È//
 				//std::wstring num = std::to_wstring(u_len);//½«Êı×Ö×ª»¯Îª¿í×Ö·û´®//
 				//MessageBox(NULL,num.c_str(), L"QQ", MB_ICONINFORMATION);
 				std::string u_str(u_len, 0);//·ÖÅä¿Õ¼ä//
 				WideCharToMultiByte(CP_UTF8, 0, msg_one.c_str(), msg_one.size() + 1, &u_str[0], u_len, NULL, NULL);//Êµ¼Ê×ª»»//
-				
-				send(client_server,(char*)&u_len,sizeof(u_len),0);//ÏÈ·¢³¤¶È//
+
+				send(client_server, (char*)&u_len, sizeof(u_len), 0);//ÏÈ·¢³¤¶È//
 				send(client_server, u_str.c_str(), u_len, 0);//ºó·¢ÄÚÈİ//
 
 				EnterCriticalSection(&g_csMsg_two_Queue);//¼ÓËø//
@@ -2190,35 +3020,2608 @@ void Handlelogin_pro(SOCKET client_server,receivedData my_data)//µÇÂ¼½çÃæ´¦ÀíÏß³
 				// ¼ÇÂ¼µ½·şÎñÆ÷¼à¿ØÊÒ//
 				PostMessage(g_hInfoDialogmonitor, WM_APP_UPDATEMONITOR_MSG, 0, 0);
 				//MessageBox(NULL, L"ÒÑ¾­³É¹¦Í¨ÖªĞÅÏ¢µÄ¼à¿ØÏÔÊ¾", L"QQ", MB_ICONINFORMATION);
-				
+
 			}
+			else if (wcscmp(wchar_str.c_str(), L"²é¿´¹ã²¥") == 0)
+			{
+				//½ÓÊÕÓÃ»§ÕËºÅ
+				int account_user_len = 0;
+				recv(client_server,(char*)&account_user_len,sizeof(account_user_len),0);
+				std::string account_user_str(account_user_len,'\0');
+				recv(client_server,&account_user_str[0],account_user_len,0);//ÕËºÅ²»º¬'\0'
+				char buf2[256];
+				sprintf_s(buf2, "account_user_str: [%s] len=%d\n", account_user_str.c_str(), (int)account_user_str.size());
+				OutputDebugStringA(buf2);
+				std::string s_nickname;
+				//Æ¥ÅäÓÃ»§êÇ³Æ
+				for (auto it=g_users.begin();it!=g_users.end();)
+				{
+					if (strcmp(it->account.c_str(), account_user_str.c_str()) == 0)
+					{
+						s_nickname = it->nickname.c_str();//²»º¬¡®\0'
+						break;
+					}
+					it++;
+				}
+
+				char buf3[256];
+				sprintf_s(buf3, "s_nickname: [%s] len=%d\n", s_nickname.c_str(), (int)s_nickname.size());
+				OutputDebugStringA(buf3);
+				
+				int s_nickname_len =s_nickname.size();
+				send(client_server,(char*)&s_nickname_len,sizeof(s_nickname_len),0);
+				send(client_server,s_nickname.c_str(),s_nickname_len,0);
+
+				//Æ¥Åäg_offline_users_and_informationÀïµÄ¶ÔÓ¦ÓÃ»§ÕËºÅ´æ´¢µÄÏûÏ¢
+				
+				int infor_sum = 0;
+			
+				//Í³¼ÆÒ»¹²¶àÉÙÌõ¹ã²¥
+				for (auto it = g_offline_users_and_information.begin(); it != g_offline_users_and_information.end();)//´Ó×îÔç²åÈëµÄÏûÏ¢±éÀúµ½×îºó²åÈëµÄÏûÏ¢£¬ÏûÏ¢·¢ËÍË³ĞòÕıÈ·
+				{
+					std::string acc1 = it->account;
+					std::string acc2 = account_user_str;
+					while (!acc1.empty() && acc1.back() == '\0') acc1.pop_back();
+					while (!acc2.empty() && acc2.back() == '\0') acc2.pop_back();
+
+					// Êä³öÄÚÈİºÍ³¤¶È
+					char buf[256];
+					sprintf_s(buf, "acc1: [%s] len=%d, acc2: [%s] len=%d\n", acc1.c_str(), (int)acc1.size(), acc2.c_str(), (int)acc2.size());
+					OutputDebugStringA(buf);
+
+					if (strcmp(acc1.c_str(),acc2.c_str())==0)//Æ¥Åäg_offline_users_and_informationÀïµÄ¶ÔÓ¦ÓÃ»§ÕËºÅ´æ´¢µÄÏûÏ¢ 
+					{
+						infor_sum++;
+					}
+					it++;
+				
+				}
+
+				if (infor_sum == 0)
+				{
+					MessageBox(NULL, L"¸ÃÓÃ»§Ã»ÓĞÎ´½ÓÊÕµÄ¹ã²¥ÏûÏ¢", L"QQ", MB_ICONERROR);
+				}
+				//ÏÈ·¢ËÍ¹ã²¥ÌõÊı
+				send(client_server,(char*)&infor_sum,sizeof(infor_sum),0);
+				
+				if (g_offline_users_and_information.empty())
+				{
+					MessageBox(NULL, L"·şÎñÆ÷Ã»ÓĞÎ´·¢³öµÄ¹ã²¥ÏûÏ¢", L"QQ", MB_ICONERROR);
+					continue;
+				}
+
+				if (infor_sum > 0)//ĞèÒª·¢ËÍ¹ã²¥ÏûÏ¢
+				{
+					for (auto it = g_offline_users_and_information.begin(); it != g_offline_users_and_information.end();)//´Ó×îÔç²åÈëµÄÏûÏ¢±éÀúµ½×îºó²åÈëµÄÏûÏ¢£¬ÏûÏ¢·¢ËÍË³ĞòÕıÈ·
+					{
+						if (it->account == account_user_str)//Æ¥Åäg_offline_users_and_informationÀïµÄ¶ÔÓ¦ÓÃ»§ÕËºÅ´æ´¢µÄÏûÏ¢ 
+						{
+
+									// ·¢ËÍÏûÏ¢
+									int l = it->information.size();
+									send(client_server,(char*)&l,sizeof(l),0);
+									send(client_server, it->information.c_str(), it->information.size(), 0);//·¢ËÍÏÈÇ°¸ÃÓÃ»§´æ´¢µÄ¹ã²¥ÏûÏ¢£¬º¬'\0'
+									
+									EnterCriticalSection(&g_csMsg_two_Queue);//¼ÓËø//
+									int w_str_len = 0;
+									w_str_len = MultiByteToWideChar(CP_UTF8,0,it->information.c_str(),it->information.size(),NULL,0);
+									std::wstring w_str_s(w_str_len,L'\0');
+									MultiByteToWideChar(CP_UTF8, 0, it->information.c_str(), it->information.size(),&w_str_s[0], w_str_len); 
+
+									//»ñÈ¡µ±Ç°Ê±¼ä//
+									time_t now_one = time(0);//»ñÈ¡µ±Ç°Ê±¼ä£¬¾«È·µ½Ãë//
+									tm tm_one;//ÉùÃ÷Ò»¸ö½á¹¹Ìå£¬ÓÃÓÚ´æ´¢±¾µØÊ±¼äµÄ¸÷¸ö×é³É²¿·Ö//
+									localtime_s(&tm_one, &now_one);//½«now_one£¨ÊäÈë£©ÀïµÄÄÚÈİ¸´ÖÆµ½tm_oneÀïÊä³ö//
+									wchar_t timeBuffer_one[64];
+									wcsftime(timeBuffer_one, sizeof(timeBuffer_one) / sizeof(wchar_t), L"%Y-%m-%d %H:%M:%S", &tm_one);
+									//MessageBox(NULL, L"ÒÑ¾­×¼±¸ºÃÁËÊ±¼ä×Ö¶Î", L"QQ", MB_ICONINFORMATION);
+
+
+									std::wstring msg_one = L"[";
+									msg_one += timeBuffer_one;
+									msg_one += L"][";
+									msg_one += L"·şÎñÆ÷";
+									msg_one += L"->";
+									
+									//ÓÃ»§êÇ³Æ
+									int  w_s_nickname_len = 0;
+									w_s_nickname_len = MultiByteToWideChar(CP_UTF8,0,s_nickname.c_str(),s_nickname.size(),NULL,0);
+									std::wstring w_s_nickname_str(w_s_nickname_len,L'\0');
+									MultiByteToWideChar(CP_UTF8, 0, s_nickname.c_str(), s_nickname.size(),&w_s_nickname_str[0],w_s_nickname_len);
+
+									msg_one +=w_s_nickname_str;
+									msg_one += L"]";
+								
+									int  w_s_len = 0;
+									w_s_len = MultiByteToWideChar(CP_UTF8, 0,it->information.c_str(),it->information.size(), NULL, 0);
+									std::wstring w_s_str(w_s_len, L'\0');
+									MultiByteToWideChar(CP_UTF8, 0, it->information.c_str(),it->information.size(), &w_s_str[0], w_s_len);
+                                    msg_one += w_s_str.c_str();
+									g_msg_two_Queue.push(msg_one);//´´½¨¸±±¾//
+									LeaveCriticalSection(&g_csMsg_two_Queue);//½âËø//
+									PostMessage(g_hInfoDialogmonitor, WM_APP_UPDATEMONITOR_MSG, 0, 0);//Í¨Öª¼à¿Ø¿òÏÔÊ¾¸ÃÌõÏûÏ¢
+
+								
+							// É¾³ı¸ÃÌõ¼ÇÂ¼£¬²¢¸üĞÂµü´úÆ÷
+							std::lock_guard<std::mutex> lock_broadcast_account(g_users_account_and_information_sel_broadcast_Mutex);//À´È·±£Ïß³Ì°²È«
+							it = g_offline_users_and_information.erase(it);//·µ»ØÉ¾³ıÔªËØµÄÏÂÒ»Ìõ
+						}
+						else
+						{
+							++it;
+						}
+					}
+				}
+	
+			}
+	      
+
+
 		}
-		
-		std::thread(Handlelogin_pro, client_server, my_data).detach();//·µ»ØµÇÂ¼Ê×½çÃæ´¦ÀíÏß³Ì//
+		//½ÓÊÕÍË³öÏûÏ¢ºó£¬ÍË³öwhile Ñ­»·
+		std::thread(Handlelogin_pro, client_server, my_data,new_online_user_account).detach();//·µ»ØµÇÂ¼Ê×½çÃæ´¦ÀíÏß³Ì//
 	}
 	else if (wcscmp(wstr.c_str(),L"ÁÄÌìÊÒ")==0)
 	{
+	door_1:
+		//½ÓÊÕ¿Í»§¶Ë¼ÓÔØÁÄÌìÊÒÔ­ÓĞµÄËùÓĞÏûÏ¢µÄÇëÇó
+		int r_len = 0;
+		recv(client_server, (char*)&r_len, sizeof(r_len), 0);
+		std::string r_str(r_len,'\0');
+		recv(client_server,&r_str[0],r_len,0);
+
+		//OutputDebugStringA(("r_str is"+r_str+"\n").c_str());
+		//±È½Ï½ÓÊÕµÄ×Ö·û´®ÊÇ·ñÕıÈ·
+		if (strcmp(r_str.c_str(),"ÇëÇó¼ÓÔØÁÄÌìÊÒµÄÏûÏ¢") != 0)
+		{
+			//½ÓÊÕÊ§°Ü
+			MessageBox(NULL, L"·şÎñÆ÷¼ÓÔØÁÄÌìÊÒÏûÏ¢µÄÇëÇóÊ§°Ü", L"QQ", MB_ICONERROR);
+			return;
+		}
+		MessageBox(NULL, L"·şÎñÆ÷¼ÓÔØÁÄÌìÊÒÏûÏ¢µÄÇëÇó³É¹¦", L"QQ", MB_ICONINFORMATION);
+		//³É¹¦½ÓÊÕ¼ÓÔØÇëÇó
+		//std::lock_guard<std::mutex>lock(users_anii_on_chartroom_mutex);//¼ÓËø
+		//ÏÈ·¢ÏûÏ¢×ÜÌõÊı
+		int num = 0;
+		for (auto it = users_account_on_chartroom.begin(); it != users_account_on_chartroom.end();)
+		{
+			num++;
+			it++;
+		}
+		send(client_server, (char*)&num, sizeof(num), 0);
+		MessageBox(NULL, L"·şÎñÆ÷³É¹¦Ïò¿Í»§¶Ë·¢ËÍÏûÏ¢×ÜÌõÊı", L"QQ", MB_ICONINFORMATION);
+
+		if(num>0)
+		{
+			for (auto it = users_account_on_chartroom.begin(); it != users_account_on_chartroom.end();)
+			{
+				//·¢ËÍÓÃ»§Í·Ïñ
+				const BYTE* data = it->user_on_chartroom_image.data();
+				int img_len = it->user_on_chartroom_image.size();
+
+				int r = 0;
+				int sum = 0;
+
+				//·¢ËÍÏàÆ¬³¤¶È
+				send(client_server, (char*)&img_len, sizeof(img_len), 0);
+				//·¢ËÍÏàÆ¬ÄÚÈİ
+				while (sum < img_len)
+				{
+					r = send(client_server, (const char*)data + sum, img_len - sum, 0);
+					if (r > 0)
+					{
+						sum += r;
+					}
+				}
+
+				//·¢ËÍÓÃ»§êÇ³Æ
+				int nickname_len = 0;
+				nickname_len = it->user_on_chartroom_nickname.size();
+				send(client_server, (char*)&nickname_len, sizeof(nickname_len), 0);
+				send(client_server, it->user_on_chartroom_nickname.c_str(), nickname_len, 0);
+
+				//·¢ËÍÓÃ»§ÏûÏ¢
+				int inf_len = 0;
+				inf_len = it->user_on_chartroom_inf.size();
+				send(client_server, (char*)&inf_len, sizeof(inf_len), 0);
+				send(client_server, it->user_on_chartroom_inf.c_str(), inf_len, 0);
+
+				OutputDebugStringA(("the information user send in chartroom is" + it->user_on_chartroom_inf + "\n").c_str());
+				it++;
+			}
+			MessageBox(NULL, L"·şÎñÆ÷³É¹¦Ïò¿Í»§¶Ë·¢ËÍÁÄÌìÊÒµÄÁÄÌì¼ÇÂ¼", L"QQ", MB_ICONINFORMATION);
+		}
+
+		int si = 1;
+		//ÅĞ¶Ï½ÓÊÕµ½µÄÊÇÊ²Ã´ÏûÏ¢
+		while (si)
+		{
+			//½ÓÊÕ¿Í»§¶Ë·¢ËÍ»òÍË³ö°´Å¥
+			int inf_len = 0;
+			recv(client_server, (char*)&inf_len, sizeof(inf_len), 0);
+			std::string inf_str(inf_len, '\0');
+			recv(client_server, &inf_str[0],inf_len, 0);
+
+			if (strcmp(inf_str.c_str(), "·¢ËÍ") == 0)
+			{
+				std::wstring w_nickname;
+				std::wstring w_information;
+
+				MessageBox(NULL, L"ÒÑ¾­³É¹¦½ÓÊÜÀ´×Ô¿Í»§¶ËµÄÁÄÌìÊÒµÄĞÅÏ¢¡¯·¢ËÍ¡¯°´Å¥", L"QQ", MB_ICONINFORMATION);
+				//½ÓÊÕÓÃ»§·¢ËÍÎÄ±¾ÄÚÈİ
+				int text_len = 0;
+				recv(client_server,(char*)&text_len,sizeof(text_len), 0);
+				std::string text_str(text_len,'\0');
+
+				int t_r = 0;
+				int t_sum = 0;
+				while (t_sum <text_len)
+				{
+					t_r = recv(client_server,&text_str[0]+t_sum,text_len-t_sum,0);
+					if (t_r > 0)
+					{
+						t_sum += t_r;
+					}
+				}
+				
+				MessageBox(NULL, L"ÒÑ¾­³É¹¦½ÓÊÕ¿Í»§¶ËµÄÁÄÌìÏûÏ¢", L"QQ", MB_ICONINFORMATION);
+			   //¼ÓÔØÒÑ¼ÇÂ¼µÄËùÓĞÁÄÌìÊÒĞÅÏ¢µ½ÓÃ»§ÁÄÌìÊÒ¿ò£¬°üº¬ÓÃ»§Í·Ïñ¡¢ÓÃ»§êÇ³ÆºÍÓÃ»§·¢³öµÄÏûÏ¢
+
+		      //ĞèÒªÒÀ¾İÓÃ»§ÕËºÅ²éÑ¯ÓÃ»§Í·ÏñºÍêÇ³Æ
+				users_anii_on_chartroom user_i;
+				user_i = users_anii_on_chartroom();
+				//½«½øÈëÁÄÌìÊÒµÄÓÃ»§ÕËºÅ´æ´¢
+				user_i.user_on_chartroom_account = new_online_user_account;
+				if (!user_i.user_on_chartroom_account.empty() && user_i.user_on_chartroom_account.back() == '\0')
+				{
+					user_i.user_on_chartroom_account.pop_back();
+				}
+				//½«ÓÃ»§ÔÚ±à¼­ÊÒ·¢µÄÏûÏ¢´æ´¢
+				user_i.user_on_chartroom_inf = text_str;//º¬'\0'
+				
+				//×ª»»Îª¿í×Ö·û´®
+			    int w_lx= 0;
+				w_lx=MultiByteToWideChar(CP_UTF8, 0, user_i.user_on_chartroom_inf.c_str(), user_i.user_on_chartroom_inf.size(), NULL, 0);
+				w_information.resize(w_lx);
+				MultiByteToWideChar(CP_UTF8, 0, user_i.user_on_chartroom_inf.c_str(), user_i.user_on_chartroom_inf.size(), &w_information[0], w_lx);
+
+				//¼ÓÔØÓÃ»§µÄêÇ³ÆºÍÍ·Ïñ²¢´¢´æ
+				{
+					//std::vector  <users_anii_on_chartroom> temp;//ÔİÊ±´æ´¢ÓÃ»§ÏûÏ¢
+
+					MYSQL* conn_6 = mysql_init(NULL);
+					int con_num = 0;
+					while (!mysql_real_connect(conn_6, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))//Á¬½ÓÊı¾İ¿â//
+					{
+						MessageBox(NULL, L"Á¬½ÓÊı¾İ¿âÊ§°Ü", L"QQ", MB_ICONERROR);
+						con_num++;
+						if (con_num > 3)
+						{
+							mysql_close(conn_6);
+							return;
+						}
+					}
+
+					//SQLÃüÁîÓï¾ä//
+					std::string sql = "SELECT nickname,imgData FROM users WHERE account='" + user_i.user_on_chartroom_account + "' LIMIT 1";
+					if (mysql_query(conn_6, sql.c_str()))//Èç¹ûÃ»ÓĞ·ûºÏµÄ²éÑ¯½á¹û£¬·µ»Ø·ÇÁãÖµ//
+					{
+						MessageBox(NULL, L"Ã»ÓĞ·ûºÏµÄêÇ³ÆºÍÍ·Ïñ", L"QQ", MB_ICONERROR);
+						return;
+					}
+
+					MYSQL_RES* res = mysql_store_result(conn_6);//Ò»¸ö½á¹û¼¯//
+					if (!res)
+					{
+						return;
+					}
+					MYSQL_ROW  row;//Ö¸Ïò×Ö·û´®Êı×éµÄÖ¸Õë//
+					unsigned long* lengths;
+					row = mysql_fetch_row(res);//È¡Ä³Ò»ĞĞ²éÑ¯½á¹û¼¯//
+					{
+						lengths = mysql_fetch_lengths(res);//È¡Ä³Ò»ĞĞ²éÑ¯½á¹û³¤¶È¼¯//
+
+						if (row[0])
+						{
+							user_i.user_on_chartroom_nickname = row[0];
+							//½«Æä×ª»»Îª¿í×Ö·û
+							int w_l = 0;
+							w_l = MultiByteToWideChar(CP_UTF8,0,user_i.user_on_chartroom_nickname.c_str(),user_i.user_on_chartroom_nickname.size(),NULL,0);
+							w_nickname.resize(w_l);
+							MultiByteToWideChar(CP_UTF8, 0, user_i.user_on_chartroom_nickname.c_str(), user_i.user_on_chartroom_nickname.size(), &w_nickname[0], w_l);
+						}
+						if (row[1] && lengths[1] > 0)
+						{
+							user_i.user_on_chartroom_image.assign((BYTE*)row[1], (BYTE*)row[1] + lengths[1]);
+						}
+
+						//temp.push_back(std::move(user_i));//½«Ìî³äºÃµÄÓÃ»§¶ÔÏóÒÆ¶¯µ½È«¾ÖÓÃ»§ÁĞ±íÀï£¬·ÀÖ¹²»±ØÒªµÄ¿½±´
+						//std::lock_guard<std::mutex>lock(users_anii_on_chartroom_mutex);//¼ÓËø
+						users_account_on_chartroom.push_back(std::move(user_i));//½«Ìî³äºÃµÄÓÃ»§¶ÔÏóÒÆ¶¯µ½È«¾ÖÓÃ»§ÁĞ±íÀï£¬·ÀÖ¹²»±ØÒªµÄ¿½±´
+					}
+					mysql_free_result(res);
+					//std::lock_guard<std::mutex>lock(users_anii_on_chartroom_mutex);//¼ÓËø
+					//users_account_on_chartroom.swap(temp);
+					mysql_close(conn_6);
+
+					MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦±£´æ¸ÃÓÃ»§µÄÍ·Ïñ¡¢êÇ³ÆºÍËù·¢µÄÏûÏ¢", L"QQ", MB_ICONINFORMATION);
+					
+					//Í¨Öª¿Í»§¶Ë¸üĞÂÁÄÌìÊÒ¸üĞÂÁÄÌìÏûÏ¢
+					std::string no_utf8_inf = "Çë¸üĞÂÁÄÌìÊÒÏûÏ¢";
+					int no_utf8_string_len = no_utf8_inf.size();
+					send(client_server, (char*)&no_utf8_string_len, sizeof(no_utf8_string_len), 0);
+					send(client_server, no_utf8_inf.c_str(), no_utf8_inf.size(), 0);
+
+
+					//½«´ËÌõÏûÏ¢ÏÔÊ¾ÔÚ·şÎñÆ÷¼à¿Ø¿ò
+					//MessageBox(NULL, w_str.c_str(), L"QQ", MB_ICONINFORMATION);
+				    //»ñÈ¡µ±Ç°Ê±¼ä//
+					time_t now_one = time(0);//»ñÈ¡µ±Ç°Ê±¼ä£¬¾«È·µ½Ãë//
+					tm tm_one;//ÉùÃ÷Ò»¸ö½á¹¹Ìå£¬ÓÃÓÚ´æ´¢±¾µØÊ±¼äµÄ¸÷¸ö×é³É²¿·Ö//
+					localtime_s(&tm_one, &now_one);//½«now_one£¨ÊäÈë£©ÀïµÄÄÚÈİ¸´ÖÆµ½tm_oneÀïÊä³ö//
+					wchar_t timeBuffer_one[64];
+					wcsftime(timeBuffer_one, sizeof(timeBuffer_one) / sizeof(wchar_t), L"%Y-%m-%d %H:%M:%S", &tm_one);
+					//MessageBox(NULL, L"ÒÑ¾­×¼±¸ºÃÁËÊ±¼ä×Ö¶Î", L"QQ", MB_ICONINFORMATION);
+
+					std::wstring msg_one = L"[";
+					msg_one += timeBuffer_one;
+					msg_one += L"][";
+					
+					//MessageBox(NULL, L"ÒÑ¾­³É¹¦½«êÇ³ÆÄ©Î²µÄ¡®0¡¯µ¯³ö", L"QQ", MB_ICONINFORMATION);
+					msg_one += w_nickname;
+					//MessageBox(NULL, L"ÒÑ¾­³É¹¦Æ´½ÓêÇ³Æ", L"QQ", MB_ICONINFORMATION);
+					msg_one += L"->";
+					//MessageBox(NULL, L"ÒÑ¾­³É¹¦Æ´½ÓºÃ->", L"QQ", MB_ICONINFORMATION);
+					msg_one += L"ÁÄÌìÊÒ";
+					msg_one += L"]";
+					//MessageBox(NULL, L"ÒÑ¾­³É¹¦Æ´½ÓºÃ·şÎñÆ÷×Ö¶Î", L"QQ", MB_ICONINFORMATION);
+					msg_one += w_information;
+					
+					EnterCriticalSection(&g_csMsg_two_Queue);//¼ÓËø//
+					g_msg_two_Queue.push(msg_one);//´´½¨¸±±¾//
+					LeaveCriticalSection(&g_csMsg_two_Queue);//½âËø//
+					//MessageBox(NULL, L"ÒÑ¾­³É¹¦½«ĞÅÏ¢Æ´½Ó", L"QQ", MB_ICONINFORMATION);
+					// ¼ÇÂ¼µ½·şÎñÆ÷¼à¿ØÊÒ//
+					PostMessage(g_hInfoDialogmonitor, WM_APP_UPDATEMONITOR_MSG, 0, 0);
+					//MessageBox(NULL, L"ÒÑ¾­³É¹¦Í¨ÖªĞÅÏ¢µÄ¼à¿ØÏÔÊ¾", L"QQ", MB_ICONINFORMATION);
+
+					MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦Ïò¿Í»§¶Ë·¢ËÍ¸üĞÂÁÄÌìÊÒÏûÏ¢µÄÍ¨Öª", L"QQ", MB_ICONINFORMATION);
+					goto door_1;
+				}
+
+			}
+			else if (strcmp(inf_str.c_str(), "¸üĞÂÏûÏ¢") == 0)
+			{
+				//½ÓÊÕ¿Í»§¶Ë¼ÓÔØÁÄÌìÊÒÔ­ÓĞµÄËùÓĞÏûÏ¢µÄÇëÇó
+				int r_len = 0;
+				recv(client_server, (char*)&r_len, sizeof(r_len), 0);
+				std::string r_str(r_len, '\0');
+				recv(client_server, &r_str[0], r_len, 0);
+
+				//OutputDebugStringA(("r_str is"+r_str+"\n").c_str());
+				//±È½Ï½ÓÊÕµÄ×Ö·û´®ÊÇ·ñÕıÈ·
+				if (strcmp(r_str.c_str(), "ÇëÇó¼ÓÔØÁÄÌìÊÒµÄÏûÏ¢") != 0)
+				{
+					//½ÓÊÕÊ§°Ü
+					MessageBox(NULL, L"·şÎñÆ÷¼ÓÔØÁÄÌìÊÒÏûÏ¢µÄÇëÇóÊ§°Ü", L"QQ", MB_ICONERROR);
+					return;
+				}
+				MessageBox(NULL, L"·şÎñÆ÷¼ÓÔØÁÄÌìÊÒÏûÏ¢µÄÇëÇó³É¹¦", L"QQ", MB_ICONINFORMATION);
+				//³É¹¦½ÓÊÕ¼ÓÔØÇëÇó
+				//std::lock_guard<std::mutex>lock(users_anii_on_chartroom_mutex);//¼ÓËø
+				//ÏÈ·¢ÏûÏ¢×ÜÌõÊı
+				int num = 0;
+				for (auto it = users_account_on_chartroom.begin(); it != users_account_on_chartroom.end();)
+				{
+					num++;
+					it++;
+				}
+				send(client_server, (char*)&num, sizeof(num), 0);
+				MessageBox(NULL, L"·şÎñÆ÷³É¹¦Ïò¿Í»§¶Ë·¢ËÍÏûÏ¢×ÜÌõÊı", L"QQ", MB_ICONINFORMATION);
+
+				if (num > 0)
+				{
+					for (auto it = users_account_on_chartroom.begin(); it != users_account_on_chartroom.end();)
+					{
+						//·¢ËÍÓÃ»§Í·Ïñ
+						const BYTE* data = it->user_on_chartroom_image.data();
+						int img_len = it->user_on_chartroom_image.size();
+
+						int r = 0;
+						int sum = 0;
+
+						//·¢ËÍÏàÆ¬³¤¶È
+						send(client_server, (char*)&img_len, sizeof(img_len), 0);
+						//·¢ËÍÏàÆ¬ÄÚÈİ
+						while (sum < img_len)
+						{
+							r = send(client_server, (const char*)data + sum, img_len - sum, 0);
+							if (r > 0)
+							{
+								sum += r;
+							}
+						}
+
+						//·¢ËÍÓÃ»§êÇ³Æ
+						int nickname_len = 0;
+						nickname_len = it->user_on_chartroom_nickname.size();
+						send(client_server, (char*)&nickname_len, sizeof(nickname_len), 0);
+						send(client_server, it->user_on_chartroom_nickname.c_str(), nickname_len, 0);
+
+						//·¢ËÍÓÃ»§ÏûÏ¢
+						int inf_len = 0;
+						inf_len = it->user_on_chartroom_inf.size();
+						send(client_server, (char*)&inf_len, sizeof(inf_len), 0);
+						send(client_server, it->user_on_chartroom_inf.c_str(), inf_len, 0);
+
+						OutputDebugStringA(("the information user send in chartroom is" + it->user_on_chartroom_inf + "\n").c_str());
+						it++;
+					}
+					MessageBox(NULL, L"·şÎñÆ÷³É¹¦Ïò¿Í»§¶Ë·¢ËÍÁÄÌìÊÒµÄÁÄÌì¼ÇÂ¼", L"QQ", MB_ICONINFORMATION);
+				}
+			}
+			else if (strcmp(inf_str.c_str(), "ÍË³ö") == 0)
+			{
+				si = 0;//ÍË³öÏûÏ¢½ÓÊÕÑ­»·
+				MessageBox(NULL, L"ÒÑ¾­³É¹¦½ÓÊÜÀ´×Ô¿Í»§¶ËµÄÁÄÌìÊÒµÄĞÅÏ¢¡¯ÍË³ö¡¯°´Å¥", L"QQ", MB_ICONINFORMATION);
+
+				std::string account = new_online_user_account;
+				if (!account.empty() && account.back() == '\0')
+				{
+					account.pop_back();
+				}
+
+				//½«¸ÃÓÃ»§ÕËºÅµ¯³ö¶ÓÁĞ
+				//std::lock_guard<std::mutex>lock(users_anii_on_chartroom_mutex);//¼ÓËø//
+				auto it = std::find_if(users_account_on_chartroom.begin(), users_account_on_chartroom.end(), [&account](const users_anii_on_chartroom& user) {return user.user_on_chartroom_account == account; });//Èô²éÕÒ³É¹¦£¬·µ»ØµÚÒ»¸öÖ¸Ïòrecv_user_account_strµÄÖ¸Õë
+				if (it != users_account_on_chartroom.end()) 
+				{
+					users_account_on_chartroom.erase(it);
+				}
+				break;
+			}
+			else
+			{
+				si = 0;
+				MessageBox(NULL, L"ÎŞ·¨½ÓÊÜÀ´×Ô¿Í»§¶ËµÄÁÄÌìÊÒµÄĞÅÏ¢ÇëÇó°´Å¥", L"QQ", MB_ICONERROR);
+				return;
+			}
+		}
+		
+		//ÍË³öºó½«½øÈëµÇÂ¼½çÃæÊ×Ò³Ïß³Ì
+		std::thread(Handlelogin_pro,client_server,my_data,new_online_user_account).detach();
 
 	}
 	else if (wcscmp(wstr.c_str(),L"ºÃÓÑ")==0)
 	{
+		door_102:
+		{
+			//¿Í»§¶Ë½øÈëºÃÓÑ¹¦ÄÜ
+			//½ÓÊÕ¼ÓÔØ¿Í»§¶ËÓÃ»§ºÃÓÑÁĞ±íµÄÇëÇó
+			int msg_len = 0;
+			recv(client_server, (char*)&msg_len, sizeof(msg_len), 0);
+			std::string msg(msg_len, '\0');
+			recv(client_server, &msg[0], msg_len, 0);
+			//±È½Ï½ÓÊÕ×Ö·ûÄÚÈİ
+			if (strcmp(msg.c_str(), "ÇëÇó¼ÓÔØºÃÓÑÁĞ±í") != 0)
+			{
+				std::string msg_x = "failure";
+				int msg_x_len = msg_x.size();
+				send(client_server, (char*)&msg_x_len, sizeof(msg_x_len), 0);
+				send(client_server, msg_x.c_str(), msg_x.size(), 0);
+				//·µ»ØµÇÂ¼Ê×½çÃæ´¦ÀíÏß³Ì
+				std::thread(Handlelogin_pro, client_server, my_data, new_online_user_account).detach();//·µ»ØµÇÂ¼Ê×½çÃæ´¦ÀíÏß³Ì
+			}
+			std::string msg_x = "success";
+			int msg_x_len = msg_x.size();
+			send(client_server, (char*)&msg_x_len, sizeof(msg_x_len), 0);
+			send(client_server, msg_x.c_str(), msg_x.size(), 0);
 
+
+			//ÒÀ¾İÓÃ»§ÕËºÅ¼ÓÔØÓÃ»§µÄºÃÓÑÁĞ±í£¬new_online_user_accountº¬¡®\0'
+			std::string user_account = new_online_user_account;
+			if (!user_account.empty() && user_account.back() == '\0')
+			{
+				user_account.pop_back();
+			}
+			char *buf=new char[50]();
+			snprintf(buf,50, "the user_account is %s\n",user_account.c_str());
+			OutputDebugStringA(buf);
+			delete[]buf;
+
+			std::vector <std::string>user_friends_account;//ºÃÓÑÕËºÅÁĞ±í¶ÓÁĞ
+			user_friends_account.clear();
+
+
+
+			//ÒÀ¾İÓÃ»§ÕËºÅ²éÑ¯±í¸ÃÓÃ»§ÕËºÅÓµÓĞµÄ×ÜĞĞÊı
+			MYSQL* conn_9 = mysql_init(NULL);
+			int conn_9_count = 0;
+			while (!mysql_real_connect(conn_9, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+			{
+				conn_9_count++;
+				if (conn_9_count > 3)
+				{
+					break;
+				}
+			}
+
+			const char* sql = "SELECT friend_account FROM friends WHERE account=?";
+			MYSQL_STMT* stmt = mysql_stmt_init(conn_9);
+			if (!stmt)
+			{
+				return;
+			}
+			if (mysql_stmt_prepare(stmt, sql, strlen(sql)))
+			{
+				mysql_stmt_close(stmt);
+				return;
+			}
+
+			MYSQL_BIND bind[1]; // 1¸ö²ÎÊı
+			memset(bind, 0, sizeof(bind));
+
+			bind[0].buffer_type = MYSQL_TYPE_STRING;
+			bind[0].buffer = (void*)user_account.c_str();
+			bind[0].buffer_length = user_account.length();
+
+			if (mysql_stmt_bind_param(stmt, bind))
+			{
+				mysql_stmt_close(stmt);
+				return;
+			}
+
+			if (mysql_stmt_execute(stmt))
+			{
+				mysql_stmt_close(stmt);
+				return;
+			}
+
+			//°ó¶¨Êä³ö½á¹û
+			char friend_account[65] = {0};
+		
+			unsigned long friend_account_len;
+			MYSQL_BIND bind_result[1];
+			memset(bind_result, 0, sizeof(bind_result));
+
+			bind_result[0].buffer_type = MYSQL_TYPE_STRING;
+			bind_result[0].buffer = (void*)friend_account;
+			bind_result[0].buffer_length = sizeof(friend_account);
+		
+			if (mysql_stmt_bind_result(stmt,bind_result))
+			{
+				mysql_stmt_close(stmt);
+				return;
+			}
+
+			int total_count = 0;
+		
+				while (mysql_stmt_fetch(stmt) == 0)
+				{
+					user_friends_account.push_back(friend_account);
+				
+					char *buf_3=new char[50]();
+					snprintf(buf_3,50, "the friend_acount is %s\n",friend_account);
+					OutputDebugStringA(buf_3);
+					delete[]buf_3;
+					total_count++;
+				}
+			
+			mysql_stmt_close(stmt);
+			mysql_close(conn_9);
+
+
+			//·şÎñÆ÷ÒÑ¾­³É¹¦¼ÓÔØÓÃ»§ºÃÓÑÕË»§ÁĞ±í
+			//»¹ĞèÒª¸ù¾İºÃÓÑÕËºÅ¼ÓÔØºÃÓÑµÄêÇ³ÆºÍÍ·Ïñ
+
+			//Ïò¿Í»§¶Ë·¢ËÍºÃÓÑ¸öÊı
+			send(client_server, (char*)&total_count, sizeof(total_count), 0);
+			char *buf_2=new char[50]();
+			snprintf(buf_2,50, "the total_count is %d\n", total_count);
+			OutputDebugStringA(buf_2);
+			delete[]buf_2;
+
+
+			int* online_user_signal = new int[total_count]();//ºÃÓĞÓÃ»§ÔÚÏß±êÖ¾
+			int k = 0;
+
+
+			MessageBox(NULL, L"ÒÑ¾­³É¹¦Ïò¿Í»§¶Ë·¢ËÍºÃÓÑ¸öÊıÏûÏ¢", L"QQ",MB_ICONINFORMATION);
+
+			if (total_count > 0 && !user_friends_account.empty())
+			{
+				std::vector <std::string>user_friends_nickname;//ºÃÓÑêÇ³ÆÁĞ±í¶ÓÁĞ
+				std::vector< std::vector <BYTE>>user_friends_image;//ºÃÓÑÍ·ÏñÁĞ±í
+
+				user_friends_nickname.clear();
+				user_friends_image.clear();
+
+				//ÒÀ¾İÓÃ»§ÕËºÅ²éÑ¯±í¸ÃÓÃ»§ÕËºÅÓµÓĞµÄ×ÜĞĞÊı
+				MYSQL* conn_10 = mysql_init(NULL);
+				int conn_10_count = 0;
+				while (!mysql_real_connect(conn_10, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+				{
+					conn_10_count++;
+					if (conn_10_count > 3)
+					{
+						break;
+					}
+				}
+
+
+				//±éÀúºÃÓÑÕËºÅÁĞ±í
+				for (auto it = user_friends_account.begin(); it != user_friends_account.end();)
+				{
+					//²éÑ¯ºÃÓÑÊÇ·ñÔÚÏß
+					
+					std::lock_guard<std::mutex>lok(g_onlineUsersMutex);//¼ÓËø
+
+					for (auto i=g_onlineUsers.begin();i!=g_onlineUsers.end();)
+					{
+						std::string x = i->account;
+						if (!x.empty() && x.back() == '\0')
+						{
+							x.pop_back();
+						}
+
+						if (strcmp((*it).c_str(), x.c_str()) == 0)
+						{
+							*(online_user_signal+k) = 1;
+							break;
+						}
+						
+						i++;
+					}
+
+					const char* sql_123 = "SELECT nickname,imgData FROM users WHERE account=? LIMIT 1";
+					MYSQL_STMT* stmt = mysql_stmt_init(conn_10);
+					if (!stmt)
+					{
+						return;
+					}
+					if (mysql_stmt_prepare(stmt, sql_123, strlen(sql_123)))
+					{
+						mysql_stmt_close(stmt);
+						return;
+					}
+
+					MYSQL_BIND bind[1]; // 1¸ö²ÎÊı
+					memset(bind, 0, sizeof(bind));
+
+					bind[0].buffer_type = MYSQL_TYPE_STRING;
+					bind[0].buffer = (void*)(*it).c_str();
+					bind[0].buffer_length = (*it).length();
+
+
+					if (mysql_stmt_bind_param(stmt, bind))
+					{
+						mysql_stmt_close(stmt);
+						return;
+					}
+
+					if (mysql_stmt_execute(stmt))
+					{
+						mysql_stmt_close(stmt);
+						return;
+					}
+
+
+					//°ó¶¨Êä³ö½á¹û
+					char* friend_nickname = new char[65]();
+					BYTE* friend_image = new BYTE[3 * 1024 * 1024];
+
+					unsigned long friend_nickname_len = 0;
+					unsigned long friend_image_len = 0;
+
+
+					MYSQL_BIND bind_result[2];
+					memset(bind_result, 0, sizeof(bind_result));
+
+					bind_result[0].buffer_type = MYSQL_TYPE_STRING;
+					bind_result[0].buffer = (void*)friend_nickname;
+					bind_result[0].buffer_length = 65;
+					bind_result[0].length = &friend_nickname_len;
+
+					bind_result[1].buffer_type = MYSQL_TYPE_BLOB;
+					bind_result[1].buffer = (void*)friend_image;
+					bind_result[1].buffer_length = 3 * 1024 * 1024;
+					bind_result[1].length = &friend_image_len;
+
+					if (mysql_stmt_bind_result(stmt, bind_result))
+					{
+						mysql_stmt_close(stmt);
+						return;
+					}
+
+					if (mysql_stmt_fetch(stmt) == 0)
+					{
+						
+						user_friends_nickname.push_back(friend_nickname);
+
+						char* buf_5_5 = new char[50]();
+						snprintf(buf_5_5, 50, "the friend_nickname is %s\n",friend_nickname);
+						OutputDebugStringA(buf_5_5);
+						delete[]buf_5_5;
+
+
+						if (friend_image_len < 3 * 1024 * 1024)
+						{
+							//´¢´æºÃÓÑÍ·ÏñÁĞ±í
+							std::vector<BYTE>one_image(friend_image, friend_image + friend_image_len);
+							//Ñ¹ÈëºÃÓÑ¶ÓÁĞ
+							user_friends_image.push_back(std::move(one_image));
+						}
+						else
+						{
+							std::vector<BYTE>one_image(friend_image, friend_image + 3 * 1024 * 1024);
+							//Ñ¹ÈëºÃÓÑ¶ÓÁĞ
+							user_friends_image.push_back(std::move(one_image));
+						}
+
+					}
+
+					delete[]friend_nickname;
+					delete[]friend_image;
+					mysql_stmt_close(stmt);
+					it++;
+					k++;
+				}
+
+				mysql_close(conn_10);
+
+				//MessageBox(NULL,L"·şÎñÆ÷ÒÑ¾­³É¹¦¼ÓÔØÓÃ»§µÄºÃÓÑÁĞ±í",L"QQ",MB_ICONINFORMATION);
+
+				//½«´æ´¢µÄÓÃ»§ºÃÓÑÕËºÅ¡¢êÇ³ÆºÍÍ·ÏñÊı¾İ·¢ËÍ¸ø¿Í»§¶Ë
+				int i = 0;
+				while (i < total_count)
+				{
+					std::string account_x = user_friends_account[i];//ºÃÓÑÕËºÅÁĞ±í¶ÓÁĞ
+					std::string nickname_x = user_friends_nickname[i];//ºÃÓÑêÇ³ÆÁĞ±í¶ÓÁĞ
+					std::vector<BYTE>image_x = user_friends_image[i];//ºÃÓÑÍ·ÏñÁĞ±í
+					int signal = *(online_user_signal + i);
+					
+					//·¢ËÍºÃÓÑÔÚÏß±êÖ¾
+					send(client_server, (char*)&signal, sizeof(signal), 0);
+
+					//·¢ËÍºÃÓÑÕËºÅ
+					int account_x_len = account_x.size();
+					send(client_server, (char*)&account_x_len, sizeof(account_x_len), 0);
+					send(client_server, account_x.c_str(), account_x_len, 0);
+
+					char* buf_4 = new char[50]();
+					snprintf(buf_4, 50, "the send_account is %s\n",account_x.c_str());
+					OutputDebugStringA(buf_4);
+					delete[]buf_4;
+
+
+					//·¢ËÍºÃÓÑêÇ³Æ
+					int nickname_x_len = nickname_x.size();
+					send(client_server, (char*)&nickname_x_len, sizeof(nickname_x_len), 0);
+					send(client_server, nickname_x.c_str(), nickname_x_len, 0);
+
+					char* buf_5= new char[50]();
+					snprintf(buf_5, 50, "the send_nickname is %s\n", nickname_x.c_str());
+					OutputDebugStringA(buf_5);
+					delete[]buf_5;
+
+
+					//·¢ËÍºÃÓÑÍ·Ïñ
+					int image_x_len = image_x.size();
+					send(client_server, (char*)&image_x_len, sizeof(image_x_len), 0);
+
+					char* buf_6 = new char[50]();
+					snprintf(buf_6, 50, "the image_len is %d\n", image_x_len);
+					OutputDebugStringA(buf_6);
+					delete[]buf_6;
+
+					int x_r = 0;
+					int x_sum = 0;
+					while (x_sum < image_x_len)
+					{
+						x_r = send(client_server, (char*)image_x.data() + x_sum, image_x_len - x_sum, 0);
+						if (x_r > 0)
+						{
+							x_sum += x_r;
+						}
+					}
+
+					i++;
+				}
+
+				delete[]online_user_signal;
+				MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­½«ÓÃ»§µÄºÃÓÑÁĞ±íÏûÏ¢È«²¿·¢ËÍ", L"QQ", MB_ICONINFORMATION);
+			}
+
+
+			//ÅĞ¶Ï¿Í»§¶ËËùÑ¡ÔñµÄ²Ù×÷
+
+			while (true)
+			{
+				int oper_len = 0;
+				recv(client_server, (char*)&oper_len, sizeof(oper_len), 0);
+				std::string oper_str(oper_len, '\0');
+				recv(client_server, &oper_str[0], oper_len, 0);
+
+				char* buf_102 = new char[50];
+				snprintf(buf_102,50,"the oper_str is %s\n",oper_str.c_str());
+				OutputDebugStringA(buf_102);
+				delete[]buf_102;
+
+				if (strcmp(oper_str.c_str(), "ÍË³ö") == 0)
+				{
+					//·µ»ØµÇÂ¼Ê×½çÃæ´¦ÀíÏß³Ì
+					std::thread(Handlelogin_pro, client_server, my_data, new_online_user_account).detach();//·µ»ØµÇÂ¼Ê×½çÃæ´¦ÀíÏß³Ì
+					return;
+				}
+				else if (strcmp(oper_str.c_str(), "Ë¢ĞÂÁĞ±í") == 0)
+				{
+					//ÖØĞÂ¼ÓÔØºÃÓÑÁĞ±í
+					goto door_102;
+				}
+				else if (strcmp(oper_str.c_str(), "ÁÄÌì") == 0)
+				{
+					
+					users_chart_information ix;
+
+					//ÏûÏ¢·¢ËÍ·½µÄÕËºÅ
+					std::string account_sender = new_online_user_account;
+					if (!account_sender.empty() && account_sender.back() == '\0')
+					{
+						account_sender.pop_back();
+					}
+
+					//½ÓÊÕÏûÏ¢½ÓÊÕ·½µÄÕËºÅ
+					int account_recver_len = 0;
+					recv(client_server, (char*)&account_recver_len, sizeof(account_recver_len), 0);
+					std::string account_recver(account_recver_len, '\0');
+					recv(client_server, &account_recver[0], account_recver_len, 0);
+
+					char* buf = new char[50];
+					snprintf(buf, 50, "the account_receiver is %s\n", account_recver.c_str());
+					OutputDebugStringA(buf);
+					delete[]buf;
+
+					//²éÑ¯ÓÃ»§µÄêÇ³Æ²¢·¢ËÍ
+					std::string user_nickname1;
+					std::string user_nickname2;
+
+					MYSQL* conn_235 = mysql_init(NULL);
+					int xxc = 0;
+					while (!mysql_real_connect(conn_235, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+					{
+						xxc++;
+						if (xxc > 3)
+						{
+							MessageBox(NULL, L"conn_235Á¬½ÓÊı¾İ¿âÊ§°Ü", L"QQ", MB_ICONERROR);
+						}
+					}
+					
+					char* buffx = new char[80];
+					snprintf(buffx, 80, "SELECT nickname FROM users WHERE account=%s LIMIT 1", account_sender.c_str());
+					if (mysql_query(conn_235, buffx)==0)
+					{
+						MYSQL_RES* res = mysql_store_result(conn_235);
+						if (res)
+						{
+							MYSQL_ROW row;
+							if (row = mysql_fetch_row(res))
+							{
+								user_nickname1 = row[0];
+							}
+						}
+						mysql_free_result(res);
+					}
+
+					char* buffy = new char[80];
+					snprintf(buffy, 80, "SELECT nickname FROM users WHERE account=%s LIMIT 1", account_recver.c_str());
+					if (mysql_query(conn_235, buffy) == 0)
+					{
+						MYSQL_RES* res2 = mysql_store_result(conn_235);
+						if (res2)
+						{
+							MYSQL_ROW row2;
+							if (row2 = mysql_fetch_row(res2))
+							{
+								user_nickname2 = row2[0];
+							}
+						}
+						mysql_free_result(res2);
+					}
+
+					delete[]buffx;
+					delete[]buffy;
+					mysql_close(conn_235);
+
+					int nickname1_len = user_nickname1.size();
+					send(client_server, (char*)&nickname1_len, sizeof(nickname1_len), 0);
+					send(client_server, user_nickname1.c_str(), nickname1_len, 0);
+
+
+				door_1314:
+					
+					//½ÓÊÕºÃÓÑÁÄÌì¿ò³õÊ¼»¯ÇëÇó
+					int client_len = 0;
+					recv(client_server, (char*)&client_len, sizeof(client_len), 0);
+					std::string client_str(client_len, '\0');
+					recv(client_server, &client_str[0], client_len, 0);
+
+					char* buf2 = new char[50];
+					snprintf(buf2, 50, "the client_str is %s\n", client_str.c_str());
+					OutputDebugStringA(buf2);
+					delete[]buf2;
+
+					if (strcmp("ÇëÇó¸üĞÂÁÄÌì¿òÏûÏ¢", client_str.c_str()) == 0)
+					{
+						if (g_users_chart_information.empty())
+						{
+							//Í¨Öª¿Í»§¶ËÔİÊ±Ã»ÓĞÁÄÌì¼ÇÂ¼
+							int kk = 0;
+							send(client_server, (char*)&kk, sizeof(kk), 0);
+						}
+						else
+						{
+							users_chart_information ss;
+							std::vector<users_chart_information>g_ss;
+							int inf_sum = 0;
+
+							for (auto & acc : g_users_chart_information)
+							{
+								if (strcmp(acc.inf_recv_account.c_str(), account_sender.c_str()) == 0  || strcmp(acc.inf_recv_account.c_str(), account_recver.c_str()) == 0)
+								{
+									//Çå¿Õ½á¹¹Ìå
+									ss = users_chart_information();
+
+									ss.inf_send_account = acc.inf_send_account;
+									ss.inf_recv_account = acc.inf_recv_account;
+									ss.inf = acc.inf;
+
+									g_ss.push_back(ss);
+
+									inf_sum++;
+								}
+							}
+
+							//Ïò¿Í»§¶Ë·¢ËÍÏûÏ¢ÌõÊı
+							send(client_server, (char*)&inf_sum, sizeof(inf_sum), 0);
+
+							if (inf_sum>0)
+							{
+								//½«·ûºÏÌõ¼şµÄÁÄÌì¼ÇÂ¼·¢ËÍ
+								int i = 0;
+								while (i < inf_sum)
+								{
+									//ÏûÏ¢·¢ËÍ·½ÕËºÅ
+									int inf_send_account_len=g_ss[i].inf_send_account.size();
+									send(client_server, (char*)&inf_send_account_len, sizeof(inf_send_account_len), 0);
+									send(client_server, g_ss[i].inf_send_account.c_str(), inf_send_account_len, 0);
+									
+									char* buf3 = new char[50];
+									snprintf(buf3, 50, "the inf_send_account is %s\n",g_ss[i].inf_send_account.c_str());
+									OutputDebugStringA(buf3);
+									delete[]buf3;
+
+									//ÏûÏ¢½ÓÊÕ·½ÕËºÅ
+									int inf_recv_account_len = g_ss[i].inf_recv_account.size();
+									send(client_server, (char*)&inf_recv_account_len, sizeof(inf_recv_account_len), 0);
+									send(client_server, g_ss[i].inf_recv_account.c_str(), inf_recv_account_len, 0);
+
+									char* buf4 = new char[50];
+									snprintf(buf4, 50, "the inf_recv_account is %s\n", g_ss[i].inf_recv_account.c_str());
+									OutputDebugStringA(buf4);
+									delete[]buf4;
+
+									//ÏûÏ¢
+									int inf_len = g_ss[i].inf.size();
+									send(client_server, (char*)&inf_len, sizeof(inf_len), 0);
+									send(client_server, g_ss[i].inf.c_str(), inf_len, 0);
+
+									char* buf5 = new char[50];
+									snprintf(buf5, 50, "the inf is %s\n", g_ss[i].inf.c_str());
+									OutputDebugStringA(buf5);
+									delete[]buf5;
+
+									i++;
+								}
+							}
+
+						}
+
+						
+					//½ÓÊÕÀ´×Ô¿Í»§¶ËµÄÏûÏ¢
+					while (true)
+					{
+						//½ÓÊÕ¿Í»§¶Ë·¢À´µÄÔÚºÃÓÑÁÄÌì¿òµÄ°´Å¥Ñ¡Ôñ
+						int sel_len = 0;
+						recv(client_server, (char*)&sel_len, sizeof(sel_len), 0);
+						std::string sel_str(sel_len,'\0');
+						recv(client_server,&sel_str[0],sel_len,0);
+
+						char* buf6 = new char[50];
+						snprintf(buf6, 50, "the sel_str is %s\n",sel_str.c_str());
+						OutputDebugStringA(buf6);
+						delete[]buf6;
+
+						if(strcmp("·¢ËÍÏûÏ¢",sel_str.c_str()) == 0)
+						{
+							ix = users_chart_information();
+
+							//½ÓÊÕÏûÏ¢
+							int msg_len = 0;
+							recv(client_server, (char*)&msg_len, sizeof(msg_len), 0);
+							std::string msg(msg_len, '\0');
+							recv(client_server, &msg[0], msg_len, 0);
+
+							//¼ÇÂ¼ÔÚ¼à¿Ø¿ò
+
+							{
+								int w_len1 = MultiByteToWideChar(CP_UTF8, 0, user_nickname1.c_str(),user_nickname1.size(), NULL, 0);//¼ÆËã³ö×ª»»³¤¶È//
+								std::wstring w_str1(w_len1, 0);//·ÖÅä¿Õ¼ä//
+								MultiByteToWideChar(CP_UTF8, 0, user_nickname1.c_str(), user_nickname1.size(), &w_str1[0], w_len1);//Êµ¼Ê×ª»»//
+
+								int w_len2 = MultiByteToWideChar(CP_UTF8, 0, user_nickname2.c_str(),user_nickname2.size(), NULL, 0);//¼ÆËã³ö×ª»»³¤¶È//
+								std::wstring w_str2(w_len2, 0);//·ÖÅä¿Õ¼ä//
+								MultiByteToWideChar(CP_UTF8, 0, user_nickname2.c_str(), user_nickname2.size(), &w_str2[0], w_len2);//Êµ¼Ê×ª»»//
+
+								int w_len3 = MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), msg_len, NULL, 0);//¼ÆËã³ö×ª»»³¤¶È//
+								std::wstring w_str3(w_len3, 0);//·ÖÅä¿Õ¼ä//
+								MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), msg_len, &w_str3[0], w_len3);//Êµ¼Ê×ª»»//
+								//MessageBox(NULL, L"½ÓÊÕµÇÂ¼½çÃæ¿Í»§¶Ë·¢ËÍµÄ¶Ô»°¿òÏûÏ¢³É¹¦", L"QQ", MB_ICONINFORMATION);
+
+								//MessageBox(NULL, w_str.c_str(), L"QQ", MB_ICONINFORMATION);
+								//»ñÈ¡µ±Ç°Ê±¼ä//
+								time_t now_one = time(0);//»ñÈ¡µ±Ç°Ê±¼ä£¬¾«È·µ½Ãë//
+								tm tm_one;//ÉùÃ÷Ò»¸ö½á¹¹Ìå£¬ÓÃÓÚ´æ´¢±¾µØÊ±¼äµÄ¸÷¸ö×é³É²¿·Ö//
+								localtime_s(&tm_one, &now_one);//½«now_one£¨ÊäÈë£©ÀïµÄÄÚÈİ¸´ÖÆµ½tm_oneÀïÊä³ö//
+								wchar_t timeBuffer_one[64];
+								wcsftime(timeBuffer_one, sizeof(timeBuffer_one) / sizeof(wchar_t), L"%Y-%m-%d %H:%M:%S", &tm_one);
+								//MessageBox(NULL, L"ÒÑ¾­×¼±¸ºÃÁËÊ±¼ä×Ö¶Î", L"QQ", MB_ICONINFORMATION);
+
+								std::wstring msg_one = L"[";
+								msg_one += timeBuffer_one;
+								msg_one += L"][";
+								//MessageBox(NULL, L"ÒÑ¾­³É¹¦½«êÇ³ÆÄ©Î²µÄ¡®0¡¯µ¯³ö", L"QQ", MB_ICONINFORMATION);
+								msg_one += w_str1.c_str();
+								//MessageBox(NULL, L"ÒÑ¾­³É¹¦Æ´½ÓêÇ³Æ", L"QQ", MB_ICONINFORMATION);
+								msg_one += L"->";
+								//MessageBox(NULL, L"ÒÑ¾­³É¹¦Æ´½ÓºÃ->", L"QQ", MB_ICONINFORMATION);
+								msg_one += w_str2.c_str();
+								msg_one += L"]";
+								//MessageBox(NULL, L"ÒÑ¾­³É¹¦Æ´½ÓºÃ·şÎñÆ÷×Ö¶Î", L"QQ", MB_ICONINFORMATION);
+								msg_one += w_str3.c_str();
+								
+								EnterCriticalSection(&g_csMsg_two_Queue);//¼ÓËø//
+								g_msg_two_Queue.push(msg_one);//´´½¨¸±±¾//
+								LeaveCriticalSection(&g_csMsg_two_Queue);//½âËø//
+								//MessageBox(NULL, L"ÒÑ¾­³É¹¦½«ĞÅÏ¢Æ´½Ó", L"QQ", MB_ICONINFORMATION);
+								// ¼ÇÂ¼µ½·şÎñÆ÷¼à¿ØÊÒ//
+								PostMessage(g_hInfoDialogmonitor, WM_APP_UPDATEMONITOR_MSG, 0, 0);
+								//MessageBox(NULL, L"ÒÑ¾­³É¹¦Í¨ÖªĞÅÏ¢µÄ¼à¿ØÏÔÊ¾", L"QQ", MB_ICONINFORMATION);
+
+							}
+
+
+							ix.inf_send_account = account_sender;
+							ix.inf_recv_account = account_recver;
+							ix.inf = msg;
+
+							//½«ÆäÑ¹Èë¶ÓÁĞg_users_chart_information
+							std::lock_guard<std::mutex>lok(g_users_chart_information_mutex);
+							g_users_chart_information.push_back(ix);
+
+							//¸üĞÂÏûÏ¢
+							goto door_1314;
+
+						}
+
+						else if (strcmp("¸üĞÂÏûÏ¢", sel_str.c_str()) == 0)
+						{
+							goto door_1314;
+						}
+
+						else if (strcmp("ÍË³ö", sel_str.c_str()) == 0)
+						{
+							//·µ»Øµ½ºÃÓÑ¿ò
+							goto door_102;
+						}
+
+					}
+					}
+					else
+					{
+						const char* buf = new char[50];
+						buf = "½ÓÊÕºÃÓÑÁÄÌì¿ò³õÊ¼»¯ÇëÇóÊ§°Ü";
+						OutputDebugStringA(buf);
+						delete[]buf;
+						return;
+					}
+
+					
+
+				}
+				else if (strcmp(oper_str.c_str(), "²é¿´ºÃÓÑĞÅÏ¢") == 0)
+				{
+					//½ÓÊÕºÃÓÑµÄÕËºÅ
+					int ac_len = 0;
+					recv(client_server, (char*)&ac_len, sizeof(ac_len), 0);
+					std::string ac(ac_len,'\0');
+					recv(client_server, &ac[0], ac_len, 0);
+                    
+					char* buf_account = new char[50]();
+					snprintf(buf_account, 50, "the fri_ac is %s\n",ac.c_str());
+					OutputDebugStringA(buf_account);
+					delete[]buf_account;
+
+
+					//²éÑ¯ºÃÓÑµÄ¸öÈËĞÅÏ¢
+					MYSQL* conn_421 = mysql_init(NULL);
+					int x_x = 0;
+					while (!mysql_real_connect(conn_421,"127.0.0.1","myqq_admin","123456","myqq_database",3306,NULL,0))
+					{
+						x_x++;
+						if (x_x > 3)
+						{
+							MessageBox(NULL,L"Á¬½ÓÊı¾İ¿âconn_421Ê§°Ü",L"QQ",MB_ICONERROR);
+							return;
+						}
+					}
+
+					//sqlÓï¾ä
+					const char* sql_421 = "SELECT gender,age,signature FROM users WHERE account=? LIMIT 1";
+					//»ñÈ¡Ô¤´¦ÀíÖ¸Õë
+					MYSQL_STMT* stmt_421 = mysql_stmt_init(conn_421);
+					
+					if (!stmt_421)
+					{
+						MessageBox(NULL,L"»ñÈ¡Ô¤´¦ÀíÖ¸ÕëÊ§°Ü",L"QQ",MB_ICONERROR);
+						mysql_close(conn_421);
+						return;
+					}
+
+					//½«sqlÓï¾ä×ª»»ÎªÊı¾İ¿âÄÚ²¿½á¹¹
+					if (mysql_stmt_prepare(stmt_421, sql_421, strlen(sql_421)))
+					{
+						MessageBox(NULL, L"Êı¾İ¿âÔ¤´¦ÀíÓï¾äÖ´ĞĞÊ§°Ü", L"QQ", MB_ICONERROR);
+						mysql_stmt_close(stmt_421);
+						mysql_close(conn_421);
+						return;
+					}
+
+					//°ó¶¨²ÎÊı
+					MYSQL_BIND bind_param[1];
+					memset(bind_param, 0, sizeof(bind_param));
+
+					bind_param[0].buffer_type = MYSQL_TYPE_STRING;
+					bind_param[0].buffer = (void*)ac.c_str();
+					bind_param[0].buffer_length = ac.size();
+
+					if (mysql_stmt_bind_param(stmt_421, bind_param))
+					{
+						MessageBox(NULL, L"Êı¾İ¿â°ó¶¨²ÎÊıÊ§°Ü", L"QQ", MB_ICONERROR);
+						mysql_stmt_close(stmt_421);
+						mysql_close(conn_421);
+						return;
+					}
+
+					if (mysql_stmt_execute(stmt_421))
+					{
+						MessageBox(NULL, L"Êı¾İ¿â°ó¶¨²ÎÊıÊ§°Ü", L"QQ", MB_ICONERROR);
+						mysql_stmt_close(stmt_421);
+						mysql_close(conn_421);
+						return;
+					}
+
+					char* friend_gender = new char[8]();
+					char* friend_age = new char[8]();
+					char* friend_signature = new char[256]();
+
+					//°ó¶¨½á¹û²ÎÊı
+					MYSQL_BIND bind_result[3];
+					memset(bind_result, 0, sizeof(bind_result));
+
+					bind_result[0].buffer_type = MYSQL_TYPE_STRING;
+					bind_result[0].buffer = friend_gender;
+					bind_result[0].buffer_length = 8;
+
+					bind_result[1].buffer_type = MYSQL_TYPE_STRING;
+					bind_result[1].buffer = friend_age;
+					bind_result[1].buffer_length = 8;
+
+					bind_result[2].buffer_type = MYSQL_TYPE_STRING;
+					bind_result[2].buffer = friend_signature;
+					bind_result[2].buffer_length = 256;
+
+					if (mysql_stmt_bind_result(stmt_421, bind_result))
+					{
+						MessageBox(NULL, L"Êı¾İ¿â°ó¶¨½á¹û²ÎÊıÊ§°Ü", L"QQ", MB_ICONERROR);
+						mysql_stmt_close(stmt_421);
+						mysql_close(conn_421);
+						return;
+					}
+
+
+					//½«½á¹û»º³åµ½±¾µØ
+					if (mysql_stmt_store_result(stmt_421))
+					{
+						MessageBox(NULL, L"½«²éÑ¯½á¹û»º´æµ½¿Í»§¶Ë±¾µØÊ§°Ü", L"QQ", MB_ICONERROR);
+						mysql_stmt_close(stmt_421);
+						mysql_close(conn_421);
+						return;
+					}
+
+					if (mysql_stmt_fetch(stmt_421))
+					{
+						MessageBox(NULL, L"ÎŞ·¨È¡³ö²éÑ¯½á¹û", L"QQ", MB_ICONERROR);
+						mysql_stmt_close(stmt_421);
+						mysql_close(conn_421);
+						return;
+					}
+					
+					mysql_stmt_close(stmt_421);
+					mysql_close(conn_421);
+
+
+					//·¢ËÍºÃÓÑĞÔ±ğ
+					int fri_gender_len = strlen(friend_gender);
+					send(client_server, (char*)&fri_gender_len, sizeof(fri_gender_len), 0);
+					send(client_server, friend_gender, fri_gender_len, 0);
+
+					char* buf_gender = new char[50]();
+					snprintf(buf_gender, 50, "the fri_gender is %s\n",friend_gender);
+					OutputDebugStringA(buf_gender);
+					delete[]buf_gender;
+
+
+					//·¢ËÍºÃÓÑÄêÁä
+					int fri_age_len = strlen(friend_age);
+					send(client_server, (char*)&fri_age_len, sizeof(fri_age_len), 0);
+					send(client_server,friend_age,fri_age_len,0);
+
+					char* buf_age = new char[50]();
+					snprintf(buf_age, 50, "the fri_age is %s\n", friend_age);
+					OutputDebugStringA(buf_age);
+					delete[]buf_age;
+
+					//·¢ËÍºÃÓÑµÄ¸öĞÔÇ©Ãû
+					int fri_signature_len = strlen(friend_signature);
+					send(client_server,(char*)&fri_signature_len,sizeof(fri_signature_len),0);
+					send(client_server,friend_signature,fri_signature_len,0);
+
+
+					char* buf_signature = new char[50]();
+					snprintf(buf_signature, 50, "the fri_signature is %s\n", friend_signature);
+					OutputDebugStringA(buf_signature);
+					delete[]buf_signature;
+
+					delete[]friend_gender;
+					delete[]friend_age;
+					delete[]friend_signature;
+
+                    //½ÓÊÕ¿Í»§¶ËÔÚºÃÓÑĞÅÏ¢Õ¹Ê¾¿òµÄÏûÏ¢
+					
+					int x_len = 0;
+					recv(client_server, (char*)&x_len, sizeof(x_len), 0);
+					std::string x_str(x_len, '\0');
+					recv(client_server, &x_str[0], x_len, 0);
+
+					char* buf_inf = new char[50]();
+					snprintf(buf_inf, 50, "the information is %s\n",x_str.c_str());
+					OutputDebugStringA(buf_inf);
+					delete[]buf_inf;
+
+					if (strcmp("È¡Ïû", x_str.c_str()) == 0)
+					{
+
+						//·¢ËÍ·şÎñÆ÷´¦Àí±êÖ¾
+						std::string signal_x = "success";
+						int str_x_len_x = signal_x.size();
+						send(client_server, (char*)&str_x_len_x, sizeof(str_x_len_x), 0);
+						send(client_server, signal_x.c_str(), str_x_len_x, 0);
+					}
+
+					//·µ»ØºÃÓÑ¿ò
+					goto door_102;
+				}
+				else if (strcmp(oper_str.c_str(), "¿Í»§¶ËÇëÇóÌí¼ÓºÃÓÑ") == 0)
+				{
+
+                 door_103:
+					//½ÓÊÕ¿Í»§¶Ë·¢À´µÄÈ·¶¨»òÈ¡Ïû°´Å¥
+					int st_len = 0;
+					recv(client_server, (char*)&st_len, sizeof(st_len), 0);
+					std::string st(st_len, '\0');
+					recv(client_server, &st[0], st_len, 0);
+
+					char* buf_22 = new char[50]();
+					snprintf(buf_22, 50, "the st is %s\n",st.c_str());
+					OutputDebugStringA(buf_22);
+					delete[]buf_22;
+
+
+					if (strcmp(st.c_str(), "È·¶¨") == 0)
+					{
+						//½ÓÊÕ¿Í»§¶Ë·¢À´µÄºÃÓÑÕËºÅ
+						int str_len = 0;
+						recv(client_server, (char*)&str_len, sizeof(str_len), 0);
+						std::string str_x(str_len, '\0');
+						recv(client_server, &str_x[0], str_len, 0);//ÕËºÅº¬'\0'
+
+						if (!str_x.empty() && str_x.back() == '\0')
+						{
+							str_x.pop_back();
+						}
+
+						char* buf_23 = new char[50]();
+						snprintf(buf_23, 50, "the str_x is %s\n",str_x.c_str());
+						OutputDebugStringA(buf_23);
+						delete[]buf_23;
+
+
+						//µ½users±íÖĞ²éÑ¯¸ÃÓÃ»§ÕËºÅÊÇ·ñ´æÔÚ
+
+						MYSQL* conn_12 = mysql_init(NULL);
+						int conn_12_count = 0;
+						while (!mysql_real_connect(conn_12, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+						{
+							conn_12_count++;
+							if (conn_12_count > 3)
+							{
+								return;
+							}
+						}
+
+						char sql[128];
+						snprintf(sql, sizeof(sql), "SELECT 1 FROM users WHERE account ='%s' LIMIT 1", str_x.c_str());
+
+
+						if (mysql_query(conn_12, sql) == 0)
+						{
+							MYSQL_RES* res = mysql_store_result(conn_12);
+							if (res)
+							{
+								if (mysql_num_rows(res) > 0)
+								{
+									//ÕËºÅ´æÔÚ
+									mysql_close(conn_12);
+									//¼ì²é¸ÃÕËºÅÓÃ»§ÊÇ·ñÒÑ¾­ÊÇ·¢ÆğÌí¼ÓºÃÓÑÇëÇóµÄÓÃ»§µÄºÃÓÑ £¬¼´¼ì²éfriends±í
+									MessageBox(NULL, L"·şÎñÆ÷²éÑ¯µ½¿Í»§¶Ë·¢À´µÄËùÒªÌí¼ÓºÃÓÑµÄÓÃ»§ÕËºÅ´æÔÚ",L"QQ",MB_ICONINFORMATION);
+
+									std::string host_account_y= new_online_user_account;//·¢ÆğÈËÕËºÅ
+									if (!host_account_y.empty() && host_account_y.back() == '\0')
+									{
+										host_account_y.pop_back();
+									}
+									std::string fri_account_y = str_x;//Ìí¼ÓÈËÕËºÅ
+
+
+									MYSQL* conn_1211 = mysql_init(NULL);
+									int conn_1211_count = 0;
+									while (!mysql_real_connect(conn_1211, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+									{
+										conn_1211_count++;
+										if (conn_1211_count > 3)
+										{
+											mysql_close(conn_1211);
+											return;
+										}
+									}
+
+									//MessageBox(NULL, L"·şÎñÆ÷³É¹¦Á´½ÓÊı¾İ¿âÀ´ÑéÖ¤Á½ÈËÊÇ·ñÒÑÊÇºÃÓÑ", L"QQ", MB_ICONINFORMATION);
+
+									char sql_y[128];
+									snprintf(sql_y, sizeof(sql_y), "SELECT 1 FROM friends WHERE account ='%s' AND friend_account='%s' LIMIT 1", host_account_y.c_str(), fri_account_y.c_str());
+									if (mysql_query(conn_1211, sql_y) == 0)
+									{
+										MYSQL_RES* res = mysql_store_result(conn_1211);
+										if (res)
+										{
+											if (mysql_num_rows(res) > 0)
+											{
+												//Í¨Öª¿Í»§¶ËÕËºÅ´æÔÚ
+											   //MessageBox(NULL, L"·şÎñÆ÷²éÑ¯µ½¿Í»§¶Ë·¢À´µÄËùÒªÌí¼ÓµÄºÃÓÑ£¬ÒÑÔÚÓÃ»§µÄºÃÓÑÁĞ±í", L"QQ", MB_ICONINFORMATION);
+
+												std::string inf = "ÄãÃÇÒÑ¾­ÊÇºÃÓÑ£¬ÎŞĞèÔÚ·¢ËÍºÃÓÑÇëÇó";
+												int inf_len = inf.size();
+
+												send(client_server, (char*)&inf_len, sizeof(inf_len), 0);
+												send(client_server, inf.c_str(), inf_len, 0);
+
+												mysql_close(conn_1211);
+												goto door_102;
+											}
+
+											else 
+											{
+												//MessageBox(NULL, L"·şÎñÆ÷²éÑ¯µ½¿Í»§¶Ë·¢À´µÄËùÒªÌí¼ÓºÃÓÑ²»ÔÚÓÃ»§µÄºÃÓÑÁĞ±í£¬¼´½«Ëü¼ÓÈëhalf_friend,µÈ´ıÍ¬Òâ", L"QQ", MB_ICONINFORMATION);
+
+												mysql_close(conn_1211);
+												//¼ì²éhalf_friendÖĞÊÇ·ñÒÑ´æÔÚÏà¹ØµÄÇëÇó£¬ÈôÓĞÔòºöÂÔ£¬ÈôÃ»ÓĞ£¬Ôò²åÈë
+												//½«ºÃÓÑÌí¼Ó·¢ÆğÈËÕËºÅºÍÌí¼ÓÈËÕËºÅ¼ÇÂ¼µ½±íhalf_friend
+												std::string host_account_x = new_online_user_account;//·¢ÆğÈËÕËºÅ
+												if (!host_account_x.empty() && host_account_x.back() == '\0')
+												{
+													host_account_x.pop_back();
+												}
+												std::string fri_account_x = str_x;//Ìí¼ÓÈËÕËºÅ
+
+
+												MYSQL* conn_121 = mysql_init(NULL);
+												int conn_121_count = 0;
+												while (!mysql_real_connect(conn_121, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+												{
+													conn_121_count++;
+													if (conn_121_count > 3)
+													{
+														mysql_close(conn_121);
+														return;
+													}
+												}
+												//MessageBox(NULL, L"·şÎñÆ÷³É¹¦Á´½Ó·şÎñÆ÷À´ÑéÖ¤ÊÇ·ñÒÑÓĞÏàÍ¬µÄÌí¼ÓºÃÓÑÇëÇó", L"QQ", MB_ICONINFORMATION);
+
+												char sql_x[128];
+												snprintf(sql_x, sizeof(sql_x), "SELECT 1 FROM half_friend WHERE account ='%s' AND friend_account='%s' LIMIT 1", host_account_x.c_str(), fri_account_x.c_str());
+												if (mysql_query(conn_121, sql_x) == 0)
+												{
+													MYSQL_RES* res = mysql_store_result(conn_121);
+													if (res)
+													{
+														if (mysql_num_rows(res) > 0)
+														{
+															//Í¨Öª¿Í»§¶ËÕËºÅ´æÔÚ
+															//MessageBox(NULL, L"·şÎñÆ÷²éÑ¯µ½¸ÃÓÃ»§·¢ËÍ¹ıÏàÍ¬µÄºÃÓÑÌí¼ÓÇëÇó", L"QQ", MB_ICONINFORMATION);
+
+															std::string inf = "ÒÑ¾­·¢ËÍ¹ıºÃÓÑÇëÇó£¬ÇëÄÍĞÄµÈ´ı";
+															int inf_len = inf.size();
+
+															send(client_server, (char*)&inf_len, sizeof(inf_len), 0);
+															send(client_server, inf.c_str(), inf_len, 0);
+
+															mysql_close(conn_121);
+															goto door_102;
+
+														}
+
+														else
+														{
+															mysql_close(conn_121);
+															//½«ºÃÓÑÌí¼Ó·¢ÆğÈËÕËºÅºÍÌí¼ÓÈËÕËºÅ¼ÇÂ¼µ½±íhalf_friend
+															std::string host_account = new_online_user_account;//·¢ÆğÈËÕËºÅ
+															if (!host_account.empty() && host_account.back() == '\0')
+															{
+																host_account.pop_back();
+															}
+															std::string fri_account = str_x;//Ìí¼ÓÈËÕËºÅ
+
+															//host_accountÌí¼Óµ½account×Ö¶ÎÏÂ
+															MYSQL* conn_101 = mysql_init(NULL);
+															int conn_101_count = 0;
+
+															while (!mysql_real_connect(conn_101, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+															{
+																conn_101_count++;
+																if (conn_101_count > 3)
+																{
+																	mysql_close(conn_101);
+																	return;
+																}
+															}
+
+															//MessageBox(NULL, L"·şÎñÆ÷¼´½«ÓÃ»§ÕËºÅºÍËùÒªÌí¼ÓµÄºÃÓÑÕËºÅÌí¼Óµ½half_friend±í", L"QQ", MB_ICONINFORMATION);
+
+															const char* sql_222 = "INSERT INTO half_friend (account,friend_account)VALUES(?,?)";
+															MYSQL_STMT* stmt = mysql_stmt_init(conn_101);
+															if (!stmt)
+															{
+																mysql_close(conn_101);
+																return;
+															}
+															if (mysql_stmt_prepare(stmt, sql_222, strlen(sql_222)))
+															{
+																mysql_stmt_close(stmt);
+																mysql_close(conn_101);
+																return;
+															}
+															MYSQL_BIND bind[2];
+															memset(bind, 0, sizeof(bind));
+
+															bind[0].buffer_type = MYSQL_TYPE_STRING;
+															bind[0].buffer = (void*)host_account.c_str();
+															bind[0].buffer_length = host_account.length();
+
+															bind[1].buffer_type = MYSQL_TYPE_STRING;
+															bind[1].buffer = (void*)fri_account.c_str();
+															bind[1].buffer_length = fri_account.length();
+
+															if (mysql_stmt_bind_param(stmt, bind))
+															{
+																mysql_stmt_close(stmt);
+																mysql_close(conn_101);
+																return;
+															}
+
+															if (mysql_stmt_execute(stmt))
+															{
+																mysql_stmt_close(stmt);
+																mysql_close(conn_101);
+																return;
+
+															}
+
+															//³É¹¦²åÈë
+															mysql_stmt_close(stmt);
+															mysql_close(conn_101);
+															//fri_accountÌí¼Óµ½friend_account×Ö¶ÎÏÂ
+															//MessageBox(NULL, L"·şÎñÆ÷³É¹¦½«ÓÃ»§ÕËºÅºÍËùÒªÌí¼ÓµÄºÃÓÑÕËºÅÌí¼Óµ½half_friend±í", L"QQ", MB_ICONINFORMATION);
+
+														   //Í¨Öª¿Í»§¶ËÕËºÅ´æÔÚ
+															std::string inf = "Ìí¼ÓµÄºÃÓÑÕËºÅ´æÔÚ";
+															int inf_len = inf.size();
+
+															send(client_server, (char*)&inf_len, sizeof(inf_len), 0);
+															send(client_server, inf.c_str(), inf_len, 0);
+
+															goto door_102;
+														}
+
+													}
+
+												}
+
+												else
+												{
+													//MessageBox(NULL, L"·şÎñÆ÷²éÑ¯Ê§°Ü3", L"QQ", MB_ICONERROR);
+													return;
+												}
+											}
+										}
+									}
+									else
+									{
+										//MessageBox(NULL, L"·şÎñÆ÷²éÑ¯Ê§°Ü2", L"QQ", MB_ICONERROR);
+										return;
+									}
+
+								}
+
+								else
+								{
+									//ÕËºÅ²»´æÔÚ
+									std::string inf = "Ìí¼ÓµÄºÃÓÑÕËºÅ²»´æÔÚ";
+									int inf_len = inf.size();
+									send(client_server, (char*)&inf_len, sizeof(inf_len), 0);
+									send(client_server, inf.c_str(), inf_len, 0);
+									
+									goto door_103;
+								}
+							}
+
+							else//È¡½á¹û¼¯Ê§°Ü
+							{
+								mysql_close(conn_12);
+								return;
+
+							}
+
+						}
+						else//Î´²éÑ¯³É¹¦¹ı
+						{
+							mysql_close(conn_12);
+							return;
+						}
+
+					}
+					else if (strcmp(st.c_str(), "È¡Ïû") == 0)
+					{
+						goto door_102;
+					}
+
+				}
+				else if (strcmp(oper_str.c_str(), "É¾³ıºÃÓÑ") == 0)
+				{
+					//½ÓÊÕ·şÎñÆ÷´¦Àí±êÖ¾
+					int x_len = 0;
+					recv(client_server,(char*)&x_len, sizeof(x_len), 0);
+					std::string x_str(x_len, '\0');
+					recv(client_server, &x_str[0], x_len, 0);
+					
+					std::string xx = new_online_user_account;
+					if (!xx.empty() && xx.back() == '\0')
+					{
+						xx.pop_back();
+					}
+
+					//É¾³ıhalf_friend±íÖĞµÄÏà¹Ø¼ÇÂ¼
+					MYSQL* conn_123 = mysql_init(NULL);
+					int x_y = 0;
+					while (!mysql_real_connect(conn_123, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+					{
+						x_y++;
+						if (x_y > 3)
+						{
+							MessageBox(NULL, L"Á¬½Ó²»ÉÏÊı¾İ¿â£¬¼´½«ÍË³ö1", L"QQ", MB_ICONERROR);
+							return;
+						}
+					}
+
+					const char* sql_123 = "DELETE FROM friends WHERE friend_account=? AND account=?";
+					MYSQL_STMT* stmt = mysql_stmt_init(conn_123);
+
+					if (!stmt)
+					{
+						MessageBox(NULL, L"Êı¾İ¿âÔ¤´¦ÀíÖ¸Õë»ñÈ¡Ê§°Ü1", L"QQ", MB_ICONERROR);
+						mysql_close(conn_123);
+						return;
+					}
+
+					if (mysql_stmt_prepare(stmt, sql_123, strlen(sql_123)))
+					{
+						MessageBox(NULL, L"Êı¾İ¿âÔ¤´¦ÀíÓï¾ä´¦ÀíÊ§°Ü", L"QQ", MB_ICONERROR);
+						mysql_stmt_close(stmt);
+						mysql_close(conn_123);
+						return;
+					}
+
+
+					
+						MYSQL_BIND bind_param[2];
+						memset(bind_param, 0, sizeof(bind_param));
+
+						bind_param[0].buffer_type = MYSQL_TYPE_STRING;
+						bind_param[0].buffer = (void*)xx.c_str();
+						bind_param[0].buffer_length = xx.size();
+
+
+						bind_param[1].buffer_type = MYSQL_TYPE_STRING;
+						bind_param[1].buffer = (void*)x_str.c_str();
+						bind_param[1].buffer_length = x_str.size();
+
+						if (mysql_stmt_bind_param(stmt, bind_param))
+						{
+							MessageBox(NULL, L"Êı¾İ¿â°ó¶¨²ÎÊı´¦ÀíÊ§°Ü", L"QQ", MB_ICONERROR);
+							mysql_stmt_close(stmt);
+							mysql_close(conn_123);
+							return;
+						}
+
+						if (mysql_stmt_execute(stmt))
+						{
+							MessageBox(NULL, L"Êı¾İ¿âÖ´ĞĞÓï¾äÖ´ĞĞÊ§°Ü", L"QQ", MB_ICONERROR);
+							mysql_stmt_close(stmt);
+							mysql_close(conn_123);
+							return;
+						}
+
+					//½«friend_account,account ×Ö¶ÎµÄÄÚÈİ½»»»
+
+						//MYSQL_BIND bind_param[2];
+						memset(bind_param, 0, sizeof(bind_param));
+
+						bind_param[1].buffer_type = MYSQL_TYPE_STRING;
+						bind_param[1].buffer = (void*)xx.c_str();
+						bind_param[1].buffer_length = xx.size();
+
+
+						bind_param[0].buffer_type = MYSQL_TYPE_STRING;
+						bind_param[0].buffer = (void*)x_str.c_str();
+						bind_param[0].buffer_length = x_str.size();
+
+						if (mysql_stmt_bind_param(stmt, bind_param))
+						{
+							MessageBox(NULL, L"Êı¾İ¿â°ó¶¨²ÎÊı´¦ÀíÊ§°Ü", L"QQ", MB_ICONERROR);
+							mysql_stmt_close(stmt);
+							mysql_close(conn_123);
+							return;
+						}
+
+						if (mysql_stmt_execute(stmt))
+						{
+							MessageBox(NULL, L"Êı¾İ¿âÖ´ĞĞÓï¾äÖ´ĞĞÊ§°Ü", L"QQ", MB_ICONERROR);
+							mysql_stmt_close(stmt);
+							mysql_close(conn_123);
+							return;
+						}
+
+
+					mysql_stmt_close(stmt);
+					mysql_close(conn_123);
+
+					std::string cc = "success";
+					int cc_l = cc.size();
+					send(client_server, (char*)&cc_l, sizeof(cc_l), 0);
+					send(client_server, cc.c_str(), cc_l, 0);
+
+					goto door_102;
+
+				}
+				else if (strcmp(oper_str.c_str(), "ĞÂÅóÓÑ") == 0)
+				{
+					//½ÓÊÕ³¤¶È
+					int r_len = 0;
+					recv(client_server, (char*)&r_len, sizeof(r_len), 0);
+					std::string s_str(r_len,'\0');
+					recv(client_server, &s_str[0],r_len,0);
+
+					char* buf_x1 = new char[50]();
+					snprintf(buf_x1, 50, "the s_str is %s\n",s_str.c_str());
+					OutputDebugStringA(buf_x1);
+					delete[]buf_x1;
+
+
+					//±È½Ï½ÓÊÜÄÚÈİ
+					if (strcmp(s_str.c_str(), "¿Í»§¶ËÇëÇó¼ÓÔØĞÂÅóÓÑÁĞ±í") == 0)
+					{
+						std::string send_inf = "success";
+						int send_len = send_inf.size();
+						send(client_server, (char*)&send_len, sizeof(send_len), 0);
+						send(client_server,send_inf.c_str(),send_len,0);
+
+						char* buf_x2 = new char[50]();
+						snprintf(buf_x2, 50, "the send_inf is %s\n",send_inf.c_str());
+						OutputDebugStringA(buf_x2);
+						delete[]buf_x2;
+
+						std::vector<std::string> half_friend_account_list;
+						half_friend_account_list.clear();
+
+
+						//²éÑ¯±íhalf_friend,²é¿´Ò»¹²ÓĞ¶àÉÙÌõfriend_accountÎªÓÃ»§ÕË»§µÄ¼ÇÂ¼
+						int half_f = 0;
+
+						MYSQL* conn_45 = mysql_init(NULL);
+						int conn_45_count = 0;
+						while (!mysql_real_connect(conn_45, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+						{
+							conn_45_count++;
+							if (conn_45_count > 3)
+							{
+								mysql_close(conn_45);
+								return;
+							}
+						}
+
+						std::string u_r = new_online_user_account;
+						if (!u_r.empty() && u_r.back() == '\0')
+						{
+							u_r.pop_back();
+						}
+
+						char* sql_666 = new char[81];
+						snprintf(sql_666,81,"SELECT account FROM half_friend WHERE friend_account=%s",u_r.c_str());
+						
+						if (mysql_query(conn_45, sql_666) == 0)
+						{
+							MYSQL_RES* res = mysql_store_result(conn_45);
+							if (res)
+							{
+								MYSQL_ROW row;
+								while((row=mysql_fetch_row(res))!=NULL)
+								{
+									half_friend_account_list.push_back(row[0]);//´æ´¢·¢ÆğÌí¼ÓºÃÓÑµÄÓÃ»§ÕËºÅ
+									half_f++;
+								}
+								mysql_free_result(res);
+							}
+						}
+						mysql_close(conn_45);
+						delete[]sql_666;
+
+						//Ïò¿Í»§¶Ë·¢ËÍĞÂÅóÓÑµÄÈËÊı
+						send(client_server,(char*)&half_f,sizeof(half_f),0);
+
+						char* buf_x3 = new char[50]();
+						snprintf(buf_x3, 50, "the total half_friend is %d\n",half_f);
+						OutputDebugStringA(buf_x3);
+						delete[]buf_x3;
+						
+						if (half_f == 0)
+						{
+							goto door_102;//·µ»ØºÃÓÑ¿òÊ×Ò³
+						}
+
+						//´Ó±íusers²éÑ¯Ìí¼ÓºÃÓÑ·¢ÆğÈËµÄêÇ³ÆºÍÍ·Ïñ
+						else if (half_f > 0)
+						{
+							std::vector <std::string> half_friends_nickname;
+							std::vector <std::vector<BYTE>> half_friends_image;
+
+							half_friends_nickname.clear();
+							half_friends_image.clear();
+
+							//²éÑ¯±íhalf_friend,²é¿´Ò»¹²ÓĞ¶àÉÙÌõfriend_accountÎªÓÃ»§ÕË»§µÄ¼ÇÂ¼
+							MYSQL* conn_4544 = mysql_init(NULL);
+							int conn_4544_count = 0;
+							while (!mysql_real_connect(conn_4544, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+							{
+								conn_4544_count++;
+								if (conn_4544_count > 3)
+								{
+									mysql_close(conn_4544);
+									return;
+								}
+							}
+
+								const char* sql_333 = "SELECT nickname,imgData FROM users WHERE account=? LIMIT 1";
+								MYSQL_STMT* stmt = mysql_stmt_init(conn_4544);
+								if (!stmt)
+								{
+									return;
+								}
+								if (mysql_stmt_prepare(stmt, sql_333, strlen(sql_333)))
+								{
+									mysql_stmt_close(stmt);
+									return;
+								}
+
+							for (auto it = half_friend_account_list.begin(); it != half_friend_account_list.end();)
+							{
+
+								MYSQL_BIND bind[1]; // 1¸ö²ÎÊı
+								memset(bind, 0, sizeof(bind));
+
+								bind[0].buffer_type = MYSQL_TYPE_STRING;
+								bind[0].buffer = (void*)(*it).c_str();
+								bind[0].buffer_length = (*it).length();
+
+
+								if (mysql_stmt_bind_param(stmt, bind))
+								{
+									mysql_stmt_close(stmt);
+									return;
+								}
+
+								if (mysql_stmt_execute(stmt))
+								{
+									mysql_stmt_close(stmt);
+									return;
+								}
+
+
+								//°ó¶¨Êä³ö½á¹û
+								char* friend_nickname = new char[65]();
+								BYTE* friend_image = new BYTE[3 * 1024 * 1024];
+
+								unsigned long friend_nickname_len = 0;
+								unsigned long friend_image_len = 0;
+
+
+								MYSQL_BIND bind_result[2];
+								memset(bind_result, 0, sizeof(bind_result));
+
+								bind_result[0].buffer_type = MYSQL_TYPE_STRING;
+								bind_result[0].buffer = (void*)friend_nickname;
+								bind_result[0].buffer_length = 65;
+								bind_result[0].length = &friend_nickname_len;
+
+								bind_result[1].buffer_type = MYSQL_TYPE_BLOB;
+								bind_result[1].buffer = (void*)friend_image;
+								bind_result[1].buffer_length = 3 * 1024 * 1024;
+								bind_result[1].length = &friend_image_len;
+
+								if (mysql_stmt_bind_result(stmt, bind_result))
+								{
+									mysql_stmt_close(stmt);
+									return;
+								}
+
+								if (mysql_stmt_fetch(stmt) == 0)
+								{
+
+									half_friends_nickname.push_back(friend_nickname);
+
+									char* buf_5_5 = new char[50]();
+									snprintf(buf_5_5, 50, "the friend_nickname is %s\n", friend_nickname);
+									OutputDebugStringA(buf_5_5);
+									delete[]buf_5_5;
+
+
+									if (friend_image_len < 3 * 1024 * 1024)
+									{
+										//´¢´æºÃÓÑÍ·ÏñÁĞ±í
+										std::vector<BYTE>one_image(friend_image, friend_image + friend_image_len);
+										//Ñ¹ÈëºÃÓÑ¶ÓÁĞ
+										half_friends_image.push_back(std::move(one_image));
+									}
+									else
+									{
+										std::vector<BYTE>one_image(friend_image, friend_image + 3 * 1024 * 1024);
+										//Ñ¹ÈëºÃÓÑ¶ÓÁĞ
+										half_friends_image.push_back(std::move(one_image));
+									}
+
+								}
+
+								delete[]friend_nickname;
+								delete[]friend_image;
+								it++;
+							}
+
+							mysql_stmt_close(stmt);
+							mysql_close(conn_4544);
+
+
+							//Ïò¿Í»§¶Ë·¢ËÍĞÂÅóÓÑµÄÏûÏ¢
+							int i = 0;
+							while (i < half_f)
+							{
+								std::string account_x = half_friend_account_list[i];//ºÃÓÑÕËºÅÁĞ±í¶ÓÁĞ
+								std::string nickname_x = half_friends_nickname[i];//ºÃÓÑêÇ³ÆÁĞ±í¶ÓÁĞ
+								std::vector<BYTE>image_x = half_friends_image[i];//ºÃÓÑÍ·ÏñÁĞ±í
+								
+
+								//·¢ËÍºÃÓÑÕËºÅ
+								int account_x_len = account_x.size();
+								send(client_server, (char*)&account_x_len, sizeof(account_x_len), 0);
+								send(client_server, account_x.c_str(), account_x_len, 0);
+
+								char* buf_4 = new char[50]();
+								snprintf(buf_4, 50, "the send_account is %s\n", account_x.c_str());
+								OutputDebugStringA(buf_4);
+								delete[]buf_4;
+
+
+								//·¢ËÍºÃÓÑêÇ³Æ
+								int nickname_x_len = nickname_x.size();
+								send(client_server, (char*)&nickname_x_len, sizeof(nickname_x_len), 0);
+								send(client_server, nickname_x.c_str(), nickname_x_len, 0);
+
+								char* buf_5 = new char[50]();
+								snprintf(buf_5, 50, "the send_nickname is %s\n", nickname_x.c_str());
+								OutputDebugStringA(buf_5);
+								delete[]buf_5;
+
+
+								//·¢ËÍºÃÓÑÍ·Ïñ
+								int image_x_len = image_x.size();
+								send(client_server, (char*)&image_x_len, sizeof(image_x_len), 0);
+
+								char* buf_6 = new char[50]();
+								snprintf(buf_6, 50, "the image_len is %d\n", image_x_len);
+								OutputDebugStringA(buf_6);
+								delete[]buf_6;
+
+								int x_r = 0;
+								int x_sum = 0;
+								while (x_sum < image_x_len)
+								{
+									x_r = send(client_server, (char*)image_x.data() + x_sum, image_x_len - x_sum, 0);
+									if (x_r > 0)
+									{
+										x_sum += x_r;
+									}
+								}
+
+								i++;
+							}
+
+
+							//ÏìÓ¦¿Í»§¶ËĞÂÅóÓÑ¿òµÄÑ¡Ôñ
+							
+							//½ÓÊÕ³¤¶È
+							int r_len_x= 0;
+							recv(client_server, (char*)&r_len_x, sizeof(r_len_x), 0);
+							std::string s_str_x(r_len_x, '\0');
+							recv(client_server, &s_str_x[0], r_len_x, 0);
+							
+							char* buf_113 = new char[50];
+							snprintf(buf_113, strlen(buf_113), "the s_str_x is %s\n",s_str_x.c_str());
+							OutputDebugStringA(buf_113);
+							delete[]buf_113;
+
+							if (strcmp("Í¬Òâ",s_str_x.c_str()) == 0)
+							{
+								//½ÓÊÕĞÂÅóÓÑÊıÄ¿
+								int f_len = 0;
+								recv(client_server, (char*)&f_len, sizeof(f_len), 0);
+
+								char* buf_114 = new char[50];
+								snprintf(buf_114, strlen(buf_114), "the f_len is %d\n",f_len);
+								OutputDebugStringA(buf_114);
+								delete[]buf_114;
+								//½ÓÊÕ¿Í»§¶Ë·¢À´µÄÍ¬ÒâµÄĞÂÅóÓÑÕËºÅ
+								//ÓÃÈİÆ÷´æ´¢¿Í»§¶Ë·¢À´µÄÕËºÅ
+								std::vector<std::string> new_friends;
+
+								for (int i = 0; i < f_len; i++)
+								{
+									int acc_len = 0;
+									recv(client_server,(char*)&acc_len,sizeof(acc_len),0);
+									std::string acc(acc_len,'\0');
+									recv(client_server, &acc[0], acc_len, 0);
+
+									char* buf_116 = new char[50];
+									snprintf(buf_116, strlen(buf_116), "the acc is %s\n",acc.c_str());
+									OutputDebugStringA(buf_116);
+									delete[]buf_116;
+
+									new_friends.push_back(acc);
+								}
+
+								std::string xx = new_online_user_account;
+								if (!xx.empty() && xx.back() == '\0')
+								{
+									xx.pop_back();
+								}
+
+								//É¾³ıhalf_friend±íÖĞµÄÏà¹Ø¼ÇÂ¼
+								MYSQL* conn_123 = mysql_init(NULL);
+								int x_y = 0;
+								while (!mysql_real_connect(conn_123, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+								{
+									x_y++;
+									if (x_y > 3)
+									{
+										MessageBox(NULL, L"Á¬½Ó²»ÉÏÊı¾İ¿â£¬¼´½«ÍË³ö1", L"QQ", MB_ICONERROR);
+										return;
+									}
+								}
+
+								const char* sql_123 = "DELETE FROM half_friend WHERE friend_account=? AND account=?";
+								MYSQL_STMT* stmt = mysql_stmt_init(conn_123);
+
+								if (!stmt)
+								{
+									MessageBox(NULL, L"Êı¾İ¿âÔ¤´¦ÀíÖ¸Õë»ñÈ¡Ê§°Ü1", L"QQ", MB_ICONERROR);
+									mysql_close(conn_123);
+									return;
+								}
+
+								if (mysql_stmt_prepare(stmt, sql_123, strlen(sql_123)))
+								{
+									MessageBox(NULL, L"Êı¾İ¿âÔ¤´¦ÀíÓï¾ä´¦ÀíÊ§°Ü", L"QQ", MB_ICONERROR);
+									mysql_stmt_close(stmt);
+									mysql_close(conn_123);
+									return;
+								}
+
+								for (auto it=new_friends.begin();it!=new_friends.end();)
+								{
+									
+									MYSQL_BIND bind_param[2];
+									memset(bind_param, 0, sizeof(bind_param));
+
+									bind_param[0].buffer_type = MYSQL_TYPE_STRING;
+									bind_param[0].buffer = (void*)xx.c_str();
+									bind_param[0].buffer_length = xx.size();
+
+
+									bind_param[1].buffer_type = MYSQL_TYPE_STRING;
+									bind_param[1].buffer = (void*)(*it).c_str();
+									bind_param[1].buffer_length = (*it).size();
+
+									if (mysql_stmt_bind_param(stmt, bind_param))
+									{
+										MessageBox(NULL, L"Êı¾İ¿â°ó¶¨²ÎÊı´¦ÀíÊ§°Ü", L"QQ", MB_ICONERROR);
+										mysql_stmt_close(stmt);
+										mysql_close(conn_123);
+										return;
+									}
+
+									if (mysql_stmt_execute(stmt))
+									{
+										MessageBox(NULL, L"Êı¾İ¿âÖ´ĞĞÓï¾äÖ´ĞĞÊ§°Ü", L"QQ", MB_ICONERROR);
+										mysql_stmt_close(stmt);
+										mysql_close(conn_123);
+										return;
+									}
+
+									it++;
+
+								}
+
+								mysql_stmt_close(stmt);
+								mysql_close(conn_123);
+
+								//²¢ÔÚfriends±íÖĞÔö¼ÓĞÂµÄÅóÓÑ¼ÇÂ¼
+
+
+								//É¾³ıhalf_friend±íÖĞµÄÏà¹Ø¼ÇÂ¼
+								MYSQL* conn_1234 = mysql_init(NULL);
+								int x_y_3 = 0;
+								while (!mysql_real_connect(conn_1234, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+								{
+									x_y_3++;
+									if (x_y_3 > 3)
+									{
+										MessageBox(NULL, L"Á¬½Ó²»ÉÏÊı¾İ¿â2", L"QQ", MB_ICONERROR);
+										return;
+									}
+								}
+
+								const char* sql_1234 = "INSERT INTO friends (account,friend_account)VALUES(?,?)";
+								MYSQL_STMT* stmt_1234= mysql_stmt_init(conn_1234);
+
+								if (!stmt_1234)
+								{
+									MessageBox(NULL, L"Êı¾İ¿âÔ¤´¦ÀíÖ¸Õë»ñÈ¡Ê§°Ü", L"QQ", MB_ICONERROR);
+									mysql_close(conn_1234);
+									return;
+								}
+
+								if (mysql_stmt_prepare(stmt_1234, sql_1234, strlen(sql_1234)))
+								{
+									MessageBox(NULL, L"Êı¾İ¿âÔ¤´¦ÀíÓï¾äÖ´ĞĞÊ§°Ü", L"QQ", MB_ICONERROR);
+									mysql_stmt_close(stmt_1234);
+									mysql_close(conn_1234);
+									return;
+								}
+
+								//Ìí¼ÓÅóÓÑÊÇË«ÏòµÄ
+
+								for (auto it = new_friends.begin(); it != new_friends.end();)
+								{
+
+									MYSQL_BIND bind_param[2];
+									memset(bind_param, 0, sizeof(bind_param));
+
+									bind_param[0].buffer_type = MYSQL_TYPE_STRING;
+									bind_param[0].buffer = (void*)xx.c_str();
+									bind_param[0].buffer_length = xx.size();
+
+									bind_param[1].buffer_type = MYSQL_TYPE_STRING;
+									bind_param[1].buffer = (void*)(*it).c_str();
+									bind_param[1].buffer_length = (*it).size();
+
+									if (mysql_stmt_bind_param(stmt_1234, bind_param))
+									{
+										MessageBox(NULL, L"Êı¾İ¿â°ó¶¨²ÎÊıÊ§°Ü2", L"QQ", MB_ICONERROR);
+										mysql_stmt_close(stmt_1234);
+										mysql_close(conn_1234);
+										return;
+									}
+
+									if (mysql_stmt_execute(stmt_1234))
+									{
+										MessageBox(NULL, L"Êı¾İ¿âÖ´ĞĞÓï¾äÖ´ĞĞÊ§°Ü2", L"QQ", MB_ICONERROR);
+										mysql_stmt_close(stmt_1234);
+										mysql_close(conn_1234);
+										return;
+									}
+
+									it++;
+								}
+
+								//account ºÍ friend_account ×Ö¶ÎÄÚÈİ½»»»
+								for (auto it = new_friends.begin(); it != new_friends.end();)
+								{
+									MYSQL_BIND bind_param[2];
+									memset(bind_param, 0, sizeof(bind_param));
+
+									bind_param[1].buffer_type = MYSQL_TYPE_STRING;
+									bind_param[1].buffer = (void*)xx.c_str();
+									bind_param[1].buffer_length = xx.size();
+
+									bind_param[0].buffer_type = MYSQL_TYPE_STRING;
+									bind_param[0].buffer = (void*)(*it).c_str();
+									bind_param[0].buffer_length = (*it).size();
+
+									if (mysql_stmt_bind_param(stmt_1234, bind_param))
+									{
+										MessageBox(NULL, L"Êı¾İ¿â°ó¶¨²ÎÊıÊ§°Ü3", L"QQ", MB_ICONERROR);
+										mysql_stmt_close(stmt_1234);
+										mysql_close(conn_1234);
+										return;
+									}
+
+									if (mysql_stmt_execute(stmt_1234))
+									{
+										MessageBox(NULL, L"Êı¾İ¿âÖ´ĞĞÓï¾äÖ´ĞĞÊ§°Ü3", L"QQ", MB_ICONERROR);
+										mysql_stmt_close(stmt_1234);
+										mysql_close(conn_1234);
+										return;
+									}
+
+									it++;
+								}
+
+
+
+								mysql_stmt_close(stmt_1234);
+								mysql_close(conn_1234);
+
+
+								std::string cc = "success";
+								int cc_l = cc.size();
+								send(client_server, (char*)&cc_l, sizeof(cc_l), 0);
+								send(client_server, cc.c_str(), cc_l, 0);
+
+								goto door_102;
+
+							}
+							else if (strcmp("¾Ü¾ø",s_str_x.c_str()) == 0)
+							{
+
+								//½ÓÊÕĞÂÅóÓÑÊıÄ¿
+								int f_len = 0;
+								recv(client_server, (char*)&f_len, sizeof(f_len), 0);
+
+								char* buf_114 = new char[50];
+								snprintf(buf_114, strlen(buf_114), "the f_len is %d\n", f_len);
+								OutputDebugStringA(buf_114);
+								delete[]buf_114;
+								//½ÓÊÕ¿Í»§¶Ë·¢À´µÄÍ¬ÒâµÄĞÂÅóÓÑÕËºÅ
+								//ÓÃÈİÆ÷´æ´¢¿Í»§¶Ë·¢À´µÄÕËºÅ
+								std::vector<std::string> new_friends;
+
+								for (int i = 0; i < f_len; i++)
+								{
+									int acc_len = 0;
+									recv(client_server, (char*)&acc_len, sizeof(acc_len), 0);
+									std::string acc(acc_len, '\0');
+									recv(client_server, &acc[0], acc_len, 0);
+
+									char* buf_116 = new char[50];
+									snprintf(buf_116, strlen(buf_116), "the acc is %s\n", acc.c_str());
+									OutputDebugStringA(buf_116);
+									delete[]buf_116;
+
+									new_friends.push_back(acc);
+								}
+
+								std::string xx = new_online_user_account;
+								if (!xx.empty() && xx.back() == '\0')
+								{
+									xx.pop_back();
+								}
+
+								//É¾³ıhalf_friend±íÖĞµÄÏà¹Ø¼ÇÂ¼
+								MYSQL* conn_123 = mysql_init(NULL);
+								int x_y = 0;
+								while (!mysql_real_connect(conn_123, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))
+								{
+									x_y++;
+									if (x_y > 3)
+									{
+										MessageBox(NULL, L"Á¬½Ó²»ÉÏÊı¾İ¿â£¬¼´½«ÍË³ö1", L"QQ", MB_ICONERROR);
+										return;
+									}
+								}
+
+								const char* sql_123 = "DELETE FROM half_friend WHERE friend_account=? AND account=?";
+								MYSQL_STMT* stmt = mysql_stmt_init(conn_123);
+
+								if (!stmt)
+								{
+									MessageBox(NULL, L"Êı¾İ¿âÔ¤´¦ÀíÖ¸Õë»ñÈ¡Ê§°Ü1", L"QQ", MB_ICONERROR);
+									mysql_close(conn_123);
+									return;
+								}
+
+								if (mysql_stmt_prepare(stmt, sql_123, strlen(sql_123)))
+								{
+									MessageBox(NULL, L"Êı¾İ¿âÔ¤´¦ÀíÓï¾ä´¦ÀíÊ§°Ü", L"QQ", MB_ICONERROR);
+									mysql_stmt_close(stmt);
+									mysql_close(conn_123);
+									return;
+								}
+
+								for (auto it = new_friends.begin(); it != new_friends.end();)
+								{
+
+									MYSQL_BIND bind_param[2];
+									memset(bind_param, 0, sizeof(bind_param));
+
+									bind_param[0].buffer_type = MYSQL_TYPE_STRING;
+									bind_param[0].buffer = (void*)xx.c_str();
+									bind_param[0].buffer_length = xx.size();
+
+
+									bind_param[1].buffer_type = MYSQL_TYPE_STRING;
+									bind_param[1].buffer = (void*)(*it).c_str();
+									bind_param[1].buffer_length = (*it).size();
+
+									if (mysql_stmt_bind_param(stmt, bind_param))
+									{
+										MessageBox(NULL, L"Êı¾İ¿â°ó¶¨²ÎÊı´¦ÀíÊ§°Ü", L"QQ", MB_ICONERROR);
+										mysql_stmt_close(stmt);
+										mysql_close(conn_123);
+										return;
+									}
+
+									if (mysql_stmt_execute(stmt))
+									{
+										MessageBox(NULL, L"Êı¾İ¿âÖ´ĞĞÓï¾äÖ´ĞĞÊ§°Ü", L"QQ", MB_ICONERROR);
+										mysql_stmt_close(stmt);
+										mysql_close(conn_123);
+										return;
+									}
+
+									it++;
+
+								}
+
+								mysql_stmt_close(stmt);
+								mysql_close(conn_123);
+
+
+								std::string cc = "success";
+								int cc_l=cc.size();
+								send(client_server, (char*)&cc_l, sizeof(cc_l), 0);
+								send(client_server, cc.c_str(), cc_l, 0);
+
+								goto door_102;
+							}
+
+							else if (strcmp("È¡Ïû", s_str_x.c_str()) == 0)
+							{
+								goto door_102;
+							}
+
+						}
+
+					}
+
+					else
+					{
+						std::string send_inf = "failure";
+						int send_len = send_inf.size();
+						send(client_server, (char*)&send_len, sizeof(send_len), 0);
+						send(client_server, send_inf.c_str(), send_len, 0);
+
+					}
+				}
+
+
+			}
+		}
+		
 	}
 	else if (wcscmp(wstr.c_str(),L"¸öÈËĞÅÏ¢")==0)
 	{
+		send_personal_information_to_client(client_server,new_online_user_account);//¼ÓÔØÓÃ»§Ô­±¾µÄÓÃ»§Êı¾İ·¢¸ø¿Í»§¶Ë
 
+		int recv_utf8_len = 0;
+		int x = recv(client_server, (char*)&recv_utf8_len, sizeof(recv_utf8_len), 0);
+		if (x != sizeof(recv_utf8_len))
+		{
+			return;
+		}
+		std::string recv_utf8_str(recv_utf8_len, '\0');
+		recv(client_server, &recv_utf8_str[0], recv_utf8_len, 0);
+		int w_len = MultiByteToWideChar(CP_UTF8, 0, recv_utf8_str.c_str(), recv_utf8_len, NULL, 0);
+		std::wstring w_str(w_len, L'\0');
+		MultiByteToWideChar(CP_UTF8, 0, recv_utf8_str.c_str(), recv_utf8_len, &w_str[0], w_len);
+		if (!w_str.empty() && w_str.back() == L'\0')
+		{
+			w_str.pop_back();
+		}
+		if (wcscmp(w_str.c_str(), L"È·¶¨") == 0)
+		{
+			my_user_information new_infor;
+			//½ÓÊÕ³ıÓÃ»§ÕËºÅÖ®ÍâµÄÓÃ»§ĞÅÏ¢£¬²¢¸üĞÂÊı¾İ¿âÀïµÄÓÃ»§ÏûÏ¢
+			recv_all_information(client_server,new_infor.password);
+			recv_all_information(client_server, new_infor.nickname);
+			recv_all_information(client_server, new_infor.gender);
+			recv_all_information(client_server, new_infor.age);
+			recv_all_information(client_server, new_infor.signature);
+
+			//ÒÀ¾İÓÃ»§ÕËºÅ£¬¸üĞÂÓÃ»§Êı¾İ¿âĞÅÏ¢
+			MYSQL* conn_4 = mysql_init(NULL);
+			std::string my_acc = new_online_user_account;
+			if (!my_acc.empty()&&my_acc.back() == '\0')
+			{
+				my_acc.pop_back();
+			}
+			if (update_user_information((const std::string)my_acc, conn_4, new_infor))//³É¹¦¸üĞÂÓÃ»§ĞÅÏ¢
+			{
+				//Í¨Öª¹ã²¥¿ò½øĞĞ¸üĞÂ
+
+				//¸üĞÂÓÃ»§ÁĞ±íµÄÔÚÏß×´Ì¬//
+				{
+					std::lock_guard<std::mutex> lk(users_mutex);//ÉÏËø
+					users_update_signal = true;      // ÉèÖÃÌõ¼ş
+					users_cv.notify_one();           // »½ĞÑÒ»¸öµÈ´ıÏß³Ì
+				}
+
+				MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦ÒÀ¾İ¿Í»§¶Ë·¢À´µÄÏûÏ¢¸üĞÂÓÃ»§ĞÅÏ¢", L"QQ", MB_ICONINFORMATION);
+				std::string inf = "update_success";
+				int inf_len = inf.size();
+				send(client_server,(char*)&inf_len,sizeof(inf_len),0);
+				send(client_server,inf.c_str(),inf_len,0);
+				mysql_close(conn_4);
+			}
+			else
+			{
+				MessageBox(NULL, L"·şÎñÆ÷ÎŞ·¨¸üĞÂÓÃ»§ĞÅÏ¢", L"QQ", MB_ICONERROR);
+				mysql_close(conn_4);
+				return;
+			}
+			//·µ»Øµ½µÇÂ¼½çÃæÊ×Ò³
+			std::thread(Handlelogin_pro, client_server, my_data,new_online_user_account).detach();
+		}
+		else if (wcscmp(w_str.c_str(), L"È¡Ïû") == 0)
+		{
+			//·µ»Øµ½µÇÂ¼½çÃæÊ×Ò³
+			std::thread(Handlelogin_pro, client_server, my_data,new_online_user_account).detach();
+		}
 	}
 	else if (wcscmp(wstr.c_str(),L"¸ü»»Í·Ïñ")==0)
 	{
+		int recv_utf8_len = 0;
+		int x=recv(client_server, (char*)&recv_utf8_len, sizeof(recv_utf8_len), 0);
+		if (x != sizeof(recv_utf8_len))
+		{
+			return;
+		}
+		std::string recv_utf8_str(recv_utf8_len,'\0');
+		recv(client_server,&recv_utf8_str[0], recv_utf8_len, 0);
+        int w_len =MultiByteToWideChar(CP_UTF8,0,recv_utf8_str.c_str(),recv_utf8_len,NULL,0);
+		std::wstring w_str(w_len,L'\0');
+		MultiByteToWideChar(CP_UTF8, 0, recv_utf8_str.c_str(), recv_utf8_len,&w_str[0], w_len);
+		if (!w_str.empty()&&w_str.back()==L'\0')
+		{
+			w_str.pop_back();
+		}
+		if (wcscmp(w_str.c_str(), L"È·¶¨") == 0)
+		{
+			//ÓÃ»§ÕËºÅ
+			std::string user_account_new = new_online_user_account;//º¬'\0'
+			if (!new_online_user_account.empty()&&new_online_user_account.back() == '\0')
+			{
+				new_online_user_account.pop_back();
+			}
+		    //½ÓÊÕĞÂµÄÍ·ÏñÊı¾İ
+			int my_new_img_len = 0;
+			recv(client_server,(char*)&my_new_img_len,sizeof(my_new_img_len),0);
+			BYTE* my_new_img = new BYTE[my_new_img_len];
+			int r = 0;//µ¥´Î½ÓÊÕÁ¿
+			int sum = 0;//×Ü½ÓÊÕÁ¿
+			while (sum<my_new_img_len)
+			{
+				r = recv(client_server, (char*)my_new_img + sum, my_new_img_len - sum, 0);
+				if (r > 0)
+				{
+					sum += r;
+				}
+				if (sum == my_new_img_len)
+				{
+					break;
+				}
+			}
 
+            
+			//recv(client_server,(char*)my_new_img,my_new_img_len,0);
+			//ÒÀ¾İÓÃ»§ÕËºÅ²éÕÒMySQLÊı¾İ¿âµÄÓÃ»§Í·Ïñ²¢½øĞĞ¸üĞÂ
+			if (update_user_img(new_online_user_account, my_new_img, my_new_img_len, conn))
+			{
+				//·şÎñÆ÷ÒÑ¾­³É¹¦¸üĞÂÍ·Ïñ
+				//Í¨Öª·şÎñÆ÷¸üĞÂÓÃ»§ÁĞ±í
+				std::lock_guard<std::mutex> lk(users_mutex);//ÉÏËø
+				users_update_signal = true;      // ÉèÖÃÌõ¼ş
+				users_cv.notify_one();           // »½ĞÑÒ»¸öµÈ´ıÏß³Ì
+			   //·¢ËÍ³É¹¦ÏûÏ¢¸ø¿Í»§¶Ë
+				std::wstring img_update_success = L"·şÎñÆ÷ÒÑ¾­³É¹¦¸üĞÂÓÃ»§Í·Ïñ";
+				int utf8_img_update_success = WideCharToMultiByte(CP_UTF8,0,img_update_success.c_str(),img_update_success.size()+1,NULL,0,NULL,NULL);
+				std::string  utf8_img_update_success_str(utf8_img_update_success,'\0');
+				WideCharToMultiByte(CP_UTF8, 0, img_update_success.c_str(), img_update_success.size() + 1, &utf8_img_update_success_str[0], utf8_img_update_success, NULL, NULL);
+				send(client_server,(char*)&utf8_img_update_success,sizeof(utf8_img_update_success),0);
+				send(client_server, utf8_img_update_success_str.c_str(), utf8_img_update_success, 0);
+
+			}
+			else
+			{
+				//·¢ËÍÊ§°ÜÏûÏ¢¸ø¿Í»§¶Ë
+				std::wstring img_update_success = L"·şÎñÆ÷ÎŞ·¨¸üĞÂÓÃ»§Í·Ïñ";
+				int utf8_img_update_success = WideCharToMultiByte(CP_UTF8, 0, img_update_success.c_str(), img_update_success.size() + 1, NULL, 0, NULL, NULL);
+				std::string  utf8_img_update_success_str(utf8_img_update_success, '\0');
+				WideCharToMultiByte(CP_UTF8, 0, img_update_success.c_str(), img_update_success.size() + 1, &utf8_img_update_success_str[0], utf8_img_update_success, NULL, NULL);
+				send(client_server, (char*)&utf8_img_update_success, sizeof(utf8_img_update_success), 0);
+				send(client_server, utf8_img_update_success_str.c_str(), utf8_img_update_success, 0);
+			}
+			//·µ»Øµ½µÇÂ¼½çÃæÊ×Ò³
+			std::thread(Handlelogin_pro, client_server, my_data,new_online_user_account).detach();
+		}
+		else if (wcscmp(w_str.c_str(), L"È¡Ïû") == 0)
+		{
+			//·µ»Øµ½µÇÂ¼½çÃæÊ×Ò³
+            std::thread(Handlelogin_pro, client_server, my_data,new_online_user_account).detach();
+		}
+		else 
+		{
+			return;
+		}
 	}
 	else if (wcscmp(wstr.c_str(),L"·µ»Ø")==0)
 	{
+		//ÕÒµ½ÍË³öµÇÂ¼µÄÓÃ»§ÕËºÅ//
+		std::string del_account = my_data.account;//my_data²»º¬'\0'ÖÕÖ¹·û//
+		    //½«¸ÃÓÃ»§´ÓÔÚÏßÓÃ»§ÁĞ±íÖĞÉ¾³ı//
+			std::lock_guard<std::mutex>lock(g_onlineUsersMutex);
+			//·µ»Ø·ûºÏÌõ¼şµÄaccountµÄÎ»ÖÃ,²¢½«accountÒÆ¶¯µ½Ä©Î²//
+			auto it = std::remove_if(g_onlineUsers.begin(), g_onlineUsers.end(), [&del_account](const User_account& user)
+				{
+					if (user.account.back() == '\0')//Èç¹ûaccountÄ©Î²ÓĞ'\0'ÖÕÖ¹·û//
+					{
+						std::string x = user.account;
+						x.pop_back();//È¥³ı'\0'ÖÕÖ¹·û//
+					    return x == del_account;
+				    }
+				});
+			//É¾³ıitµ½end()Ö®¼äµÄÔªËØ£¬°üÀ¨it£¬²»°üÀ¨end()//
+			if (it != g_onlineUsers.end()) 
+			{
+				g_onlineUsers.erase(it, g_onlineUsers.end());
+			}
+
+			//¸üĞÂÓÃ»§ÁĞ±íµÄÔÚÏß×´Ì¬//
+			{
+				std::lock_guard<std::mutex> lk(users_mutex);
+				users_update_signal = true;      // ÉèÖÃÌõ¼ş
+				users_cv.notify_one();           // »½ĞÑÒ»¸öµÈ´ıÏß³Ì
+			}
+
+			//Ë¢ĞÂ¹ã²¥¿ò
+			std::thread(LoadUsersFromDB, conn).detach();//¹ã²¥¿òÏß³Ì//
+
+			//·µ»ØµÇÂ¼ºÍ×¢²áÅĞ¶ÏÑ¡Ôñ¿ò
+			//ÅĞ¶Ï¾ßÌåÖ´ĞĞÄÄÖÖÏß³Ì,µÇÂ¼»ò×¢²á//
+			int recv_len = 0;
+			recv(client_server, (char*)&recv_len, sizeof(recv_len), 0);//½ÓÊÕÏûÏ¢³¤¶È//
+			if (recv_len <= 0)
+			{
+				//MessageBox(NULL, L"½ÓÊÕÏß³ÌÀàĞÍµÄÏûÏ¢³¤¶ÈÊ§°Ü", L"QQ", MB_ICONERROR);
+				return ;
+			}
+			//MessageBox(NULL, L"½ÓÊÕÏß³ÌÀàĞÍµÄÏûÏ¢³¤¶È³É¹¦", L"QQ", MB_ICONINFORMATION);
+			std::string recvchar(recv_len, 0);
+			int r = 0;
+			r = recv(client_server, &recvchar[0], recv_len, 0);
+			{
+				if (r <= 0)
+				{
+					//MessageBox(NULL, L"½ÓÊÕÏß³ÌÀàĞÍµÄÏûÏ¢Ê§°Ü", L"QQ", MB_ICONERROR);
+					return ;
+				}
+			}
+			//MessageBox(NULL, L"½ÓÊÕÏß³ÌÀàĞÍµÄÏûÏ¢³É¹¦", L"QQ", MB_ICONINFORMATION);
+			int wlen = MultiByteToWideChar(CP_UTF8, 0, recvchar.c_str(), recv_len, NULL, 0);//×ª»»Îª¿í×Ö½ÚËùĞèÒªµÄ×Ö½ÚÊı//
+			std::wstring wrecvchar(wlen, 0);//·ÖÅä¿Õ¼ä//
+			MultiByteToWideChar(CP_UTF8, 0, recvchar.c_str(), recv_len, &wrecvchar[0], wlen);//Êµ¼Ê×ª»»//
+			//×¢²á´¦Àí//
+			if (wcscmp(wrecvchar.c_str(), L"×¢²á") == 0)//×¢²áÏß³Ì//
+			{
+				//MessageBox(NULL, L"½ÓÊÕµ½×¢²áÏûÏ¢£¬¼´½«ÆôÓÃ×¢²áÏß³Ì", L"QQ", MB_ICONINFORMATION);
+				std::thread(HandleClient_register, client_server).detach();//´´½¨×¢²áÏß³Ì//
+			}
+			//µÇÂ¼´¦Àí//
+			else if (wcscmp(wrecvchar.c_str(), L"µÇÂ¼") == 0)//µÇÂ¼Ïß³Ì//
+			{
+				//MessageBox(NULL, L"½ÓÊÕµ½µÇÂ¼ÏûÏ¢£¬¼´½«ÆôÓÃµÇÂ¼Ïß³Ì", L"QQ", MB_ICONINFORMATION);
+				std::thread(HandleClient_login, client_server,new_online_user_account).detach();//´´½¨µÇÂ¼Ïß³Ì//
+			}
+			else if (wcscmp(wrecvchar.c_str(), L"ÍË³ö") == 0)//ÓÃ»§ÍË³ö¿Í»§¶Ë³ÌĞò//
+			{
+				//MessageBox(NULL, L"½ÓÊÕ²»µ½Ïß³ÌÏûÏ¢£¬¼´½«ÍË³ö", L"QQ", MB_ICONINFORMATION);
+				return ;
+			}
 
 	}
 	else if (wcscmp(wstr.c_str(),L"ÍË³ö")==0)
 	{
-
+		//ÕÒµ½ÍË³öµÇÂ¼µÄÓÃ»§ÕËºÅ//
+		std::string del_account = my_data.account;//my_data²»º¬'\0'ÖÕÖ¹·û//
+		//½«¸ÃÓÃ»§´ÓÔÚÏßÓÃ»§ÁĞ±íÖĞÉ¾³ı//
+		std::lock_guard<std::mutex>lock(g_onlineUsersMutex);
+		//·µ»Ø·ûºÏÌõ¼şµÄaccountµÄÎ»ÖÃ,²¢½«accountÒÆ¶¯µ½Ä©Î²//
+		auto it = std::remove_if(g_onlineUsers.begin(), g_onlineUsers.end(), [&del_account](const User_account& user)
+			{
+				if (user.account.back() == '\0')//Èç¹ûaccountÄ©Î²ÓĞ'\0'ÖÕÖ¹·û//
+				{
+					std::string x = user.account;
+					x.pop_back();//È¥³ı'\0'ÖÕÖ¹·û//
+					return x == del_account;
+				}
+			});
+		//É¾³ıitµ½end()Ö®¼äµÄÔªËØ£¬°üÀ¨it£¬²»°üÀ¨end()//
+		if (it != g_onlineUsers.end())
+		{
+			g_onlineUsers.erase(it, g_onlineUsers.end());
+		}
+		//¸üĞÂÓÃ»§ÁĞ±íµÄÔÚÏß×´Ì¬//
+		{
+			std::lock_guard<std::mutex> lk(users_mutex);
+			users_update_signal = true;      // ÉèÖÃÌõ¼ş
+			users_cv.notify_one();           // »½ĞÑÒ»¸öµÈ´ıÏß³Ì
+		}
+		return;//ÍË³ö¸ÃÏß³Ì//
 	}
 	else if (wcscmp(wstr.c_str(), L"×¢ÏúÕËºÅ") == 0)
 	{
@@ -2242,12 +5645,61 @@ void Handlelogin_pro(SOCKET client_server,receivedData my_data)//µÇÂ¼½çÃæ´¦ÀíÏß³
 		{
 			if (delete_user_by_account_password((const char*)my_data.account.c_str(),(const char*)my_data.password.c_str(), conn))
 			{
+				//¸üĞÂÓÃ»§ÁĞ±íµÄÔÚÏß×´Ì¬//
+				
+					//std::lock_guard<std::mutex> lk(users_mutex);
+					//users_update_signal = true;      // ÉèÖÃÌõ¼ş
+					//users_cv.notify_one();           // »½ĞÑÒ»¸öµÈ´ıÏß³Ì
+
+				{
+					std::vector<Userdata>temp_users;
+					temp_users.clear();
+					const char* sql = "SELECT nickname,imgData,account FROM users";//SQLÃüÁîÓï¾ä//
+					if (mysql_query(conn, sql))//Èç¹ûÃ»ÓĞ·ûºÏµÄ²éÑ¯½á¹û£¬·µ»Ø·ÇÁãÖµ//
+					{
+						//MessageBox(NULL, L"Ã»ÓĞ·ûºÏµÄêÇ³ÆºÍÍ·Ïñ", L"QQ", MB_ICONERROR);
+						return;
+					}
+
+					MYSQL_RES* res = mysql_store_result(conn);//Ò»¸ö½á¹û¼¯//
+					if (!res)
+					{
+						return;
+					}
+					MYSQL_ROW  row;//Ö¸Ïò×Ö·û´®Êı×éµÄÖ¸Õë//
+					unsigned long* lengths;
+					while ((row = mysql_fetch_row(res)))//È¡Ä³Ò»ĞĞ²éÑ¯½á¹û¼¯//
+					{
+						lengths = mysql_fetch_lengths(res);//È¡Ä³Ò»ĞĞ²éÑ¯½á¹û³¤¶È¼¯//
+						Userdata user;
+						if (row[0])
+						{
+							user.nickname = row[0];
+						}
+						if (row[1] && lengths[1] > 0)
+						{
+							user.imgData.assign((BYTE*)row[1], (BYTE*)row[1] + lengths[1]);
+						}
+						if (row[2])
+						{
+							user.account = row[2];
+						}
+						temp_users.push_back(std::move(user));//½«Ìî³äºÃµÄÓÃ»§¶ÔÏóÒÆ¶¯µ½È«¾ÖÓÃ»§ÁĞ±íÀï£¬·ÀÖ¹²»±ØÒªµÄ¿½±´//
+					}
+					mysql_free_result(res);
+					std::lock_guard<std::mutex>lock(g_usersMutex);//¼ÓËø//
+					g_users.swap(temp_users);
+
+					if (g_hInfoDialogbroadcast && IsWindow(g_hInfoDialogbroadcast))//µÈ´ı¾ä±úÓĞĞ§//
+						PostMessage(g_hInfoDialogbroadcast, WM_APP_UPDATEBROADCAST_MSG, 0, 0); // ×Ô¶¨ÒåÏûÏ¢
+				}
+
+				//std::lock_guard<std::mutex>lk(users_mutex);
+                //users_update_signal =true;//¸üĞÂÓÃ»§ÁĞ±í±êÖ¾//
+				//users_cv.notify_one();//Í¨Öªº¯ÊıÖ´ĞĞ¸üĞÂÓÃ»§ÁĞ±í//
+
 				//·µ»ØµÇÂ¼×¢²áÑ¡Ôñ´¦ÀíÏß³Ì//
 				//ÅĞ¶Ï¾ßÌåÖ´ĞĞÄÄÖÖÏß³Ì,µÇÂ¼»ò×¢²á//
-				std::lock_guard<std::mutex>lk(users_mutex);
-                users_update_signal =true;//¸üĞÂÓÃ»§ÁĞ±í±êÖ¾//
-				users_cv.notify_one();//Í¨Öªº¯ÊıÖ´ĞĞ¸üĞÂÓÃ»§ÁĞ±í//
-
 				int recv_len = 0;
 				recv(client_server, (char*)&recv_len, sizeof(recv_len), 0);//½ÓÊÕÏûÏ¢³¤¶È//
 				if (recv_len <= 0)
@@ -2280,11 +5732,12 @@ void Handlelogin_pro(SOCKET client_server,receivedData my_data)//µÇÂ¼½çÃæ´¦ÀíÏß³
 				else if (wcscmp(wrecvchar.c_str(), L"µÇÂ¼") == 0)//µÇÂ¼Ïß³Ì//
 				{
 					//MessageBox(NULL, L"½ÓÊÕµ½µÇÂ¼ÏûÏ¢£¬¼´½«ÆôÓÃµÇÂ¼Ïß³Ì", L"QQ", MB_ICONINFORMATION);
-					std::thread(HandleClient_login, client_server).detach();//´´½¨µÇÂ¼Ïß³Ì//
+					std::thread(HandleClient_login, client_server,new_online_user_account).detach();//´´½¨µÇÂ¼Ïß³Ì//
 				}
-				else
+				else if(wcscmp(wrecvchar.c_str(), L"ÍË³ö") == 0)//Èç¹ûÓÃ»§ÍË³ö¿Í»§¶Ë³ÌĞò//
 				{
 					//MessageBox(NULL, L"½ÓÊÕ²»µ½Ïß³ÌÏûÏ¢£¬¼´½«ÍË³ö", L"QQ", MB_ICONINFORMATION);
+					
 					return ;
 				}
 
@@ -2297,7 +5750,7 @@ void Handlelogin_pro(SOCKET client_server,receivedData my_data)//µÇÂ¼½çÃæ´¦ÀíÏß³
 		}
 		else if (wcscmp(wchar_str.c_str(),L"È¡Ïû") == 0)//ÓÃ»§È¡ÏûÁË×¢Ïú//
 		{
-			std::thread(Handlelogin_pro,client_server,my_data).detach();//·µ»ØµÇÂ½½çÃæ´¦ÀíÏß³Ì//
+			std::thread(Handlelogin_pro,client_server,my_data,new_online_user_account).detach();//·µ»ØµÇÂ½½çÃæ´¦ÀíÏß³Ì//
 		}
 
 	}
@@ -2337,6 +5790,7 @@ DWORD WINAPI StartServer(LPVOID lpParam)//·şÎñÆ÷Ïß³Ìº¯Êı//
 			y++;
 			continue;
 		}
+		
 		//MessageBox(NULL, L"³É¹¦´´½¨ĞÂµÄÌ×½Ó×ÖÓë¿Í»§¶Ë½øĞĞÍ¨ĞÅ", L"QQ", MB_ICONINFORMATION);
 		//ÅĞ¶Ï¾ßÌåÖ´ĞĞÄÄÖÖÏß³Ì,µÇÂ¼»ò×¢²á//
 		int recv_len = 0;
@@ -2371,9 +5825,10 @@ DWORD WINAPI StartServer(LPVOID lpParam)//·şÎñÆ÷Ïß³Ìº¯Êı//
 		else if (wcscmp(wrecvchar.c_str(), L"µÇÂ¼") == 0)//µÇÂ¼Ïß³Ì//
 		{
 			//MessageBox(NULL, L"½ÓÊÕµ½µÇÂ¼ÏûÏ¢£¬¼´½«ÆôÓÃµÇÂ¼Ïß³Ì", L"QQ", MB_ICONINFORMATION);
-			std::thread(HandleClient_login, client_server).detach();//´´½¨µÇÂ¼Ïß³Ì//
+			std::string new_online_user_account;
+			std::thread(HandleClient_login, client_server,new_online_user_account).detach();//´´½¨µÇÂ¼Ïß³Ì//
 		}
-		else
+		else if(wcscmp(wrecvchar.c_str(), L"ÍË³ö") == 0)//ÓÃ»§ÍË³ö¿Í»§¶Ë³ÌĞò//
 		{
 			//MessageBox(NULL, L"½ÓÊÕ²»µ½Ïß³ÌÏûÏ¢£¬¼´½«ÍË³ö", L"QQ", MB_ICONINFORMATION);
 			return 1;
@@ -2396,7 +5851,7 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int nCmdShow)
 		}
 	}
 	MessageBox(NULL, L"³É¹¦Á¬½ÓÊı¾İ¿â", L"QQ", MB_ICONINFORMATION);
-	//½¨±í£¬±íÃûÎªusers//
+
 	const char* create_table = "CREATE TABLE IF NOT EXISTS users("
 		"id INT PRIMARY KEY AUTO_INCREMENT,"
 		"account VARCHAR(64),"
@@ -2407,7 +5862,55 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int nCmdShow)
 		"signature VARCHAR(256),"
 		"imgData LONGBLOB"
 		");";
+
 	mysql_query(conn, create_table);
+
+	int con_num_2 = 0;
+	MYSQL* conn_7 =mysql_init(NULL);
+	while (!mysql_real_connect(conn_7, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))//Á¬½ÓÊı¾İ¿â//
+	{
+		MessageBox(NULL, L"Á¬½ÓÊı¾İ¿âÊ§°Ü", L"QQ", MB_ICONERROR);
+		con_num_2++;
+		if (con_num_2 > 3)
+		{
+			return 1;
+		}
+	}
+	MessageBox(NULL, L"³É¹¦Á¬½ÓÊı¾İ¿â", L"QQ", MB_ICONINFORMATION);
+
+	//½¨±í£¬±íÃûÎªusers//
+	const char* create_table_2 = "CREATE TABLE IF NOT EXISTS friends("
+		"id INT PRIMARY KEY AUTO_INCREMENT,"
+		"account VARCHAR(64),"
+		"friend_account VARCHAR(64)"
+		");";
+	mysql_query(conn_7, create_table_2);
+	mysql_close(conn_7);
+
+
+	int conn_33_count = 0;
+	MYSQL* conn_33 = mysql_init(NULL);
+	while (!mysql_real_connect(conn_33, "127.0.0.1", "myqq_admin", "123456", "myqq_database", 3306, NULL, 0))//Á¬½ÓÊı¾İ¿â//
+	{
+		MessageBox(NULL, L"Á¬½ÓÊı¾İ¿âÊ§°Ü", L"QQ", MB_ICONERROR);
+		conn_33_count++;
+		if (conn_33_count > 3)
+		{
+			return 1;
+		}
+	}
+	MessageBox(NULL, L"³É¹¦Á¬½ÓÊı¾İ¿â", L"QQ", MB_ICONINFORMATION);
+
+	//½¨±í£¬±íÃûÎªusers//
+	const char* create_table_3 = "CREATE TABLE IF NOT EXISTS half_friend("
+		"id INT PRIMARY KEY AUTO_INCREMENT,"
+		"account VARCHAR(64),"
+		"friend_account VARCHAR(64)"
+		");";
+	mysql_query(conn_33, create_table_3);
+	mysql_close(conn_33);
+
+
 	ULONG_PTR gdiToken = 0;//³õÊ¼»¯GDI+//
 	if (!gdiToken)
 	{
@@ -2476,16 +5979,18 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int nCmdShow)
 			);
 			ShowWindow(g_hInfoDialogbroadcast, SW_SHOW);
 		}
+
 		hThread = CreateThread(NULL, 0, StartServer, NULL, 0, NULL);//Ïß³Ìº¯Êı//
 	}
 	else if (result_one == IDEND)//Ò»¼¶ÅĞ¶Ï//
 	{
+		g_exitFlag =true;
 		DialogBox(hinstance, MAKEINTRESOURCE(IDD_MYDIALOG_END), NULL, Dialog_end);//½áÊø¿ò//
 	}
 	// Ö÷ÏûÏ¢Ñ­»·
 	MSG msg;
 	
-	while (GetMessage(&msg, NULL, 0, 0))
+	while (GetMessage(&msg, NULL, 0, 0)&&(g_exitFlag==false))
 	{
 		if (!IsDialogMessage(g_hInfoDialog, &msg)||
 			!IsDialogMessage(g_hInfoDialogphoto, &msg)||
