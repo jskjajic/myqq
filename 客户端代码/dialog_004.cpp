@@ -8,8 +8,60 @@
 #include<string>
 #include <gdiplus.h>
 #include <algorithm>
+#include <vector>
+#include <mutex> 
+#include<ctime>
 #pragma comment(lib, "gdiplus.lib")
 #pragma comment(lib,"ws2_32.lib")
+
+
+//´æ´¢ÓÃ»§µÄÍ·ÏñÊı¾İ
+std::vector<BYTE> user_image_data;
+std::string user_nickname_data;
+
+//ºÃÓÑÁÄÌì¿òµÄºÃÓÑêÇ³ÆºÍÍ·Ïñ
+std::string account_recver;
+std::string nickname_recver;
+std::vector<BYTE> image_recver;
+
+//´æ´¢ĞÂµÇÂ¼ÓÃ»§ÕËºÅ
+std::string new_online_user_account;//º¬'\0'
+std::wstring w_new_online_user_account;
+
+//¸ü¸ÄÓÃ»§¸öÈËĞÅÏ¢Ê±´æ´¢ĞÂµÇÂ¼ÓÃ»§µÄ¸öÈËĞÅÏ¢
+struct w_new_user_information
+{
+	std::wstring password;//limit 32
+	std::wstring nickname;//limit 32
+	std::wstring gender;//limit ÄĞ or Å®
+	std::wstring age;//limit 8
+	std::wstring signature;//limit 128
+};
+
+
+//µÇÂ¼Ê±¼ÓÔØĞÂµÇÂ¼ÓÃ»§µÄ¸öÈËĞÅÏ¢
+struct my_user_information
+{
+	std::string account;
+	std::string password;//limit 32
+	std::string nickname;//limit 32
+	std::string gender;//limit ÄĞ or Å®
+	std::string age;//limit 8
+	std::string signature;//limit 128
+} old_my_user_information,xxy;
+
+
+//µÇÂ¼Ê±¼ÓÔØĞÂµÇÂ¼ÓÃ»§µÄ¸öÈËĞÅÏ¢
+struct w_my_user_information
+{
+	std::wstring password;//limit 32
+	std::wstring nickname;//limit 32
+	std::wstring gender;//limit ÄĞ or Å®
+	std::wstring age;//limit 8
+	std::wstring signature;//limit 128
+} w_old_my_user_information;
+
+
 
 // È«¾Ö±äÁ¿
 SOCKET g_clientSocket = INVALID_SOCKET; // È«¾ÖÌ×½Ó×Ö£¬±£³ÖÁ¬½Ó
@@ -83,6 +135,7 @@ INT_PTR CALLBACK Dialog_one(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 	return (INT_PTR)FALSE;
 }
 
+
 INT_PTR CALLBACK Dialog_end(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//½áÊø¶Ô»°¿ò//
 {
 	static UINT_PTR TimeID = 0;//ÆôÓÃ¶¨Ê±Æ÷//
@@ -115,6 +168,7 @@ INT_PTR CALLBACK Dialog_end(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 		return (INT_PTR)TRUE;
 	case WM_CLOSE:
 		EndDialog(hwndDlg, IDEND);//¹Ø±Õ¶Ô»°¿ò//
+		exit(0);
 		break;
 	}
 	return (INT_PTR)FALSE;
@@ -229,6 +283,17 @@ INT_PTR CALLBACK Dialog_three(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 			WCHAR account[16];
 			WCHAR password[64];
 			GetDlgItemText(hwndDlg, IDC_EDIT1, account, 16);//½«ÕËºÅ±£´æ,Ëü»áÔÚ×Ö·û´®Ä©Î²Ìí¼ÓÒ»¸ö'\0'//
+			
+			//½«ÓÃ»§ÕËºÅ±£´æ
+			int wchar_account_len = wcslen(account);
+			w_new_online_user_account.resize(wchar_account_len+1);
+			wcscpy_s(&w_new_online_user_account[0],wchar_account_len+1 ,account);
+
+			int utf8_new_user_account_len = WideCharToMultiByte(CP_UTF8,0,account, wchar_account_len + 1, NULL, 0, NULL, NULL);
+			std::string utf8_new_user_account_str(utf8_new_user_account_len,'\0');
+			WideCharToMultiByte(CP_UTF8, 0, account, wchar_account_len+1, &utf8_new_user_account_str[0], utf8_new_user_account_len, NULL, NULL);
+			new_online_user_account = utf8_new_user_account_str;//º¬'\0'
+
 			GetDlgItemText(hwndDlg, IDC_EDIT2, password, 64);//½«ÃÜÂë±£´æ,Ëü»áÔÚ×Ö·û´®Ä©Î²Ìí¼ÓÒ»¸ö'\0'//
 			my_send_one(g_clientSocket, account);//·¢ËÍÕËºÅ//
 			my_send_one(g_clientSocket, password);//·¢ËÍÃÜÂë//
@@ -255,7 +320,7 @@ INT_PTR CALLBACK Dialog_three(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 			else if (wcscmp(wstr.c_str(), L"sucess") == 0)
 			{
 				MessageBox(NULL, L"µÇÂ¼³É¹¦", L"QQ", MB_ICONINFORMATION);
-                
+
 				EndDialog(hwndDlg, IDOK);
 				return (INT_PTR)TRUE;
 			}
@@ -280,6 +345,8 @@ INT_PTR CALLBACK Dialog_three(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 	}
 	return (INT_PTR)FALSE;
 }
+
+
 
 int Generate_register_number()//²úÉúÕËºÅ//
 {
@@ -537,6 +604,7 @@ WCHAR g_szPhotoPath[MAX_PATH] = L"";
 HBITMAP g_hBitmap = NULL;//HBITMAP ÊÇÎ»Í¼µÄ¾ä±úÀàĞÍ//
 HBITMAP LoadImageFileToBitmap(HWND hwnd, LPCWSTR path, int width, int height)//¼ÓÔØÍ·Ïñ,LPCWSTRÖ¸Ïò³£Á¿¿í×Ö·û×Ö·û´®µÄ³¤Ö¸Õë//
 {
+	
 	using namespace Gdiplus;
 	static ULONG_PTR gdiplusToken = 0;
 	if (!gdiplusToken) //¼ì²éGDI+ÊÇ·ñ³õÊ¼»¯//
@@ -544,6 +612,7 @@ HBITMAP LoadImageFileToBitmap(HWND hwnd, LPCWSTR path, int width, int height)//¼
 		GdiplusStartupInput gdiplusStartupInput;
 		GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 	}
+	
 	Bitmap bmp(path);//¼ÓÔØÍ¼Æ¬//
 	if (bmp.GetLastStatus() != Ok) //¼ì²ébmp×î½ü×îºóÒ»´ÎµÄ²Ù×÷×´Ì¬ÊÇ·ñ³É¹¦£¬¼´¼ÓÔØÍ¼Æ¬ÊÇ·ñ³É¹¦//
 		return NULL;
@@ -647,7 +716,9 @@ INT_PTR CALLBACK Dialog_eight(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 			WideCharToMultiByte(CP_UTF8, 0, wmsg.c_str(), wcharlen + 1, &msg[0], utf8len, NULL, NULL);//Êµ¼Ê×ª»»//
 			send(g_clientSocket, (char*)&utf8len, sizeof(utf8len), 0);//Ïò·şÎñÆ÷·¢ËÍĞÅÏ¢³¤¶È//
 			send(g_clientSocket, msg.c_str(), utf8len, 0);//Ïò·şÎñÆ÷·¢ËÍĞÅÏ¢ÄÚÈİ//
+			
 
+			
 			EndDialog(hwndDlg, IDOK);
 			return (INT_PTR)TRUE;
 		}
@@ -772,8 +843,8 @@ INT_PTR CALLBACK Dialog_nine(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPar
 			}
 			return (INT_PTR)TRUE;
 		case IDCANCEL:
-			EndDialog(hwndDlg, IDCANCEL);
-			return (INT_PTR)TRUE;
+			EndDialog(hwndDlg, IDCANCEL);//Êµ¼Ê·µ»Ø²Ù×÷Ö´ĞĞ±êÖ¾//
+			return (INT_PTR)TRUE;//²»»á·µ»Ø²Ù×÷Ö´ĞĞ±êÖ¾//
 		}break;
 	case WM_CONNECT_SUCCESS:
 	{
@@ -797,12 +868,124 @@ INT_PTR CALLBACK Dialog_nine(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPar
 	return (INT_PTR)FALSE;
 }
 
+
 INT_PTR CALLBACK Dialog_ten(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//µÇÂ¼½çÃæÊ×Ò³¿ò//
 {
 	switch (uMsg)
 	{
 	case WM_INITDIALOG:
+	{
+
+		//Ïò·şÎñÆ÷·¢ËÍ¼ÓÔØÓÃ»§Í·ÏñµÄÇëÇó
+		std::wstring Img_info = L"ÇëÇó¼ÓÔØµÇÂ¼ÓÃ»§Í·Ïñ";
+		int utf8_len = WideCharToMultiByte(CP_UTF8, 0, Img_info.c_str(), Img_info.size() + 1, NULL, 0, NULL, NULL);
+		std::string  utf8_request(utf8_len,'\0');
+		WideCharToMultiByte(CP_UTF8,0, Img_info.c_str(), Img_info.size() + 1, &utf8_request[0], utf8_len, NULL, NULL);
+		send(g_clientSocket, (char*)&utf8_len, sizeof(utf8_len), 0);
+		send(g_clientSocket, utf8_request.c_str(), utf8_len, 0);
+		MessageBox(NULL, L"ÒÑ¾­³É¹¦Ïò·şÎñÆ÷·¢ËÍ¼ÓÔØÍ·ÏñÊı¾İµÄÇëÇó", L"QQ", MB_ICONINFORMATION);
+		//½ÓÊÕ·şÎñÆ÷·¢À´µÄÓÃ»§Í·ÏñÊı¾İ
+		int recv_img_len = 0;
+		int size_x=recv(g_clientSocket,(char*)&recv_img_len,sizeof(recv_img_len),0);
+		if (size_x != sizeof(recv_img_len))
+		{
+			MessageBox(NULL, L"½ÓÊÕÍ·ÏñÊı¾İ³¤¶ÈÊ§°Ü", L"QQ", MB_ICONERROR);
+			return (INT_PTR)TRUE;
+		}
+		MessageBox(NULL, L"½ÓÊÕÍ·ÏñÊı¾İ³¤¶È³É¹¦", L"QQ", MB_ICONINFORMATION);
+		BYTE* user_img = new BYTE[recv_img_len];//½ÓÊÕÍ¼Æ¬Êı¾İ´óĞ¡
+		int r = 0;//Ã¿´Î½ÓÊÕµÄÊı¾İ
+		int sum = 0;//×Ü½ÓÊÕÊı¾İ
+		while (sum< recv_img_len)
+		{
+			r=recv(g_clientSocket, (char*)user_img+sum, recv_img_len-sum, 0);
+			if(r>0)
+			{
+			  sum += r;
+		    }
+			if (sum == recv_img_len)
+			{
+				MessageBox(NULL, L"ÇëÇóÓÃ»§Í¼ÏñÊı¾İ³É¹¦", L"QQ", MB_ICONINFORMATION);
+			}
+			else if (sum < recv_img_len)
+			{
+				MessageBox(NULL,L"ÇëÇóÓÃ»§Êı¾İÊ§°Ü",L"QQ",MB_ICONERROR);
+				return (INT_PTR)TRUE;
+			}
+		}
+
+		//´æ´¢Í¼Æ¬Êı¾İ
+		user_image_data.assign(user_img, user_img + recv_img_len);
+        
+		/*
+		int x=recv(g_clientSocket, (char*)user_img, recv_img_len, 0);
+		if(x==recv_img_len)
+		MessageBox(NULL, L"ÇëÇóÓÃ»§Í¼ÏñÊı¾İ³É¹¦", L"QQ", MB_ICONINFORMATION);
+		else
+		{
+			MessageBox(NULL, L"ÇëÇóÓÃ»§Í¼ÏñÊı¾İÊ§°Ü", L"QQ", MB_ICONERROR);
+		}
+		*/
+
+		//»ñÈ¡¿Ø¼ş´óĞ¡
+		HWND hImg = GetDlgItem(hwndDlg, IDC_MY_IMAGE_THREE);
+		RECT rc;
+		GetClientRect(hImg, &rc);
+		int w = rc.right - rc.left;
+		int h = rc.bottom - rc.top;
+
+       //½«Í¼Æ¬»æÖÆÔÚ¿Ø¼şIDC_MY_IMAGE_THREEÉÏ
+		using namespace Gdiplus;
+		static ULONG_PTR gdiplusToken = 0;
+		if (!gdiplusToken) //¼ì²éGDI+ÊÇ·ñ³õÊ¼»¯//
+		{
+			GdiplusStartupInput gdiplusStartupInput;
+			GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+		}
+
+		//½«Í¼Æ¬»æÖÆÔÚ¿Ø¼şIDC_MY_IMAGE_THREEÉÏ
+		if (user_img && recv_img_len > 0)
+		{
+			// ´´½¨IStream°ü×°ÄÚ´æÊı¾İ
+			HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, recv_img_len);
+			if (hMem)
+			{
+				void* pMem = GlobalLock(hMem);
+				memcpy(pMem, user_img, recv_img_len);
+				GlobalUnlock(hMem);
+
+				IStream* pStream = NULL;
+				if (CreateStreamOnHGlobal(hMem, TRUE, &pStream) == S_OK)
+				{
+					Bitmap* bmp = Gdiplus::Bitmap::FromStream(pStream);
+					if (bmp && bmp->GetLastStatus() == Ok)
+					{
+						// ´´½¨Ä¿±ê³ß´çµÄBitmap£¬²¢DrawImageÀ­ÉìÔ­Í¼
+						Bitmap* scaledBmp = new Bitmap(w, h, bmp->GetPixelFormat());
+						Graphics g(scaledBmp);
+						g.DrawImage(bmp, 0, 0, w, h);
+
+						HBITMAP hBmp = NULL;
+						scaledBmp->GetHBITMAP(Color(200, 230, 255), &hBmp);
+						//HWND hImg = GetDlgItem(hwndDlg, IDC_MY_IMAGE_THREE);
+						// ÊÍ·Å¿Ø¼şÔ­ÓĞÍ¼Æ¬
+						HBITMAP hOldBmp = (HBITMAP)SendMessage(hImg, STM_GETIMAGE, IMAGE_BITMAP, 0);
+						if (hOldBmp) DeleteObject(hOldBmp);
+						// ÉèÖÃĞÂÍ¼Æ¬
+						SendMessage(hImg, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hBmp);
+						delete scaledBmp;
+					}
+					delete bmp;
+					pStream->Release();
+				}
+				// hMem»á±»pStreamÊÍ·Å
+			}
+			delete[] user_img;
+			GlobalFree(hMem);
+		}
 		return (INT_PTR)TRUE;
+	}
+
 	case WM_COMMAND:
 		switch (LOWORD(wParam))
 		{
@@ -900,6 +1083,8 @@ INT_PTR CALLBACK Dialog_ten(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 			send(g_clientSocket, str.c_str(), utf8_len, 0);//ºó·¢ÄÚÈİ//
 			MessageBox(NULL, L"ÒÑ¾­³É¹¦·¢ËÍµÇÂ½½çÃæµÄ°´Å¥ĞÅÏ¢", L"QQ", MB_ICONINFORMATION);
 
+
+
 			EndDialog(hwndDlg, IDC_EDIT43);//·µ»Ø°´Å¥//
 			return (INT_PTR)TRUE;
 		}
@@ -922,6 +1107,8 @@ INT_PTR CALLBACK Dialog_ten(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 	return (INT_PTR)FALSE;
 }
 
+
+
 INT_PTR CALLBACK Dialog_eleven(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//·şÎñÆ÷¶Ô»°¿ò//
 {
 	switch (uMsg)
@@ -931,6 +1118,140 @@ INT_PTR CALLBACK Dialog_eleven(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lP
 	case WM_COMMAND:
 		switch (LOWORD(wParam))
 		{
+		case IDC_BROADCAST:
+		{
+			//·¢ËÍÖ´ĞĞ²Ù×÷±êÊ¶
+			std::wstring w_char = L"²é¿´¹ã²¥";
+			int send_len = WideCharToMultiByte(CP_UTF8, 0, w_char.c_str(), w_char.size() + 1, NULL, 0, NULL, NULL);//ÏÈ¼ÆËã×ª»»³¤¶È£¬º¬¡®\0'
+			std::string send_str(send_len, 0);//·ÖÅä¿Õ¼ä//
+			WideCharToMultiByte(CP_UTF8, 0, w_char.c_str(), w_char.size() + 1, &send_str[0], send_len, NULL, NULL);//Êµ¼Ê×ª»»//
+			send(g_clientSocket, (char*)&send_len, sizeof(send_len), 0);//ÏÈ·¢³¤¶È//
+			send(g_clientSocket, send_str.c_str(), send_len, 0);//ÔÙ·¢ÄÚÈİ//
+
+			std::string str_account = new_online_user_account;
+			if (!str_account.empty() && str_account.back() == '\0')
+			{
+				str_account.pop_back();
+			}
+
+			char buf2[256];
+			sprintf_s(buf2, "str_account: [%s] len=%d\n", str_account.c_str(), (int)str_account.size());
+			OutputDebugStringA(buf2);
+
+			//·¢ËÍÓÃ»§ÕËºÅ£¬ÒÔ¹©²éÑ¯
+			int str_account_len = str_account.size();
+			send(g_clientSocket, (char*)&str_account_len,sizeof(str_account_len),0);
+			send(g_clientSocket,str_account.c_str(),str_account_len,0);
+		    
+			//½ÓÊÕÓÃ»§êÇ³Æ
+			int str_nickname_l = 0;
+			recv(g_clientSocket,(char*)&str_nickname_l,sizeof(str_nickname_l),0);
+			std::string str_nickname(str_nickname_l,'\0');
+			recv(g_clientSocket,&str_nickname[0],str_nickname_l,0);
+			
+			//½«ÓÃ»§êÇ³Æ×ª»¯Îª¿í×Ö·û
+			int w_nick_len = 0;
+			w_nick_len = MultiByteToWideChar(CP_UTF8, 0, str_nickname.c_str(), str_nickname.size(), NULL, 0);
+			std::wstring w_nickname_s(w_nick_len, L'\0');
+			MultiByteToWideChar(CP_UTF8, 0, str_nickname.c_str(),str_nickname.size(), &w_nickname_s[0], w_nick_len);
+
+
+	       //½ÓÊÕ¹ã²¥ÏûÏ¢ÌõÊı
+			int sum_broadcast = 0;
+			recv(g_clientSocket, (char*)&sum_broadcast,sizeof(sum_broadcast),0);
+
+			if (sum_broadcast <= 0)
+			{
+				//ÌáÊ¾ÔİÎŞĞÂÏûÏ¢
+				std::wstring my_notice = L"·şÎñÆ÷ÔİÊ±Î´ÏòÄú·¢ËÍ¹ã²¥ÏûÏ¢";
+				int wlen_two = GetWindowTextLength(GetDlgItem(hwndDlg, IDC_EDIT27));//»ñÈ¡ÁÄÌì¿òÔ­ÓĞµÄÎÄ±¾,²»°üº¬'\0'//
+				std::wstring wstr_two(wlen_two + 1, 0);//·ÖÅä¿Õ¼ä//
+				GetWindowText(GetDlgItem(hwndDlg, IDC_EDIT27), &wstr_two[0], wlen_two + 1);
+				std::wstring fullmsg = L"";
+				if (wlen_two > 0)//Èç¹û²»ÊÇµÚÒ»ÌõÏûÏ¢¾Í½øĞĞ//
+				{
+					if (wstr_two.back() == L'\0')
+					{
+						wstr_two.pop_back();
+					}
+					fullmsg = wstr_two;
+
+					fullmsg += L"\r\n";
+				}
+				fullmsg += my_notice;
+				SetDlgItemText(hwndDlg, IDC_EDIT27, fullmsg.c_str());//½«ÎÄ±¾ÏÔÊ¾ÔÚ¶Ô»°¿òÉÏ//
+				return (INT_PTR)TRUE;
+			}
+			//½ÓÊÕ¹ã²¥ÏûÏ¢
+			int i = 0;
+		
+			while (i < sum_broadcast)
+			{
+				int l = 0;
+				recv(g_clientSocket,(char*)&l,sizeof(l),0);
+				std::string s(l, '\0');
+				int r = 0;
+				int sum = 0;
+				while (sum < l)
+				{
+					r=recv(g_clientSocket, &s[0]+sum, l-sum, 0);
+					if (r > 0)
+					{
+						sum += r;
+					}
+					if (sum == l)
+					{
+						//½«ÏûÏ¢×ª»¯¿í×Ö·û´®²¢È¥³ıÄ©Î²µÄ'\0'
+						int w_l = 0;
+						w_l=MultiByteToWideChar(CP_UTF8,0,s.c_str(),s.size(),NULL,0);
+						std::wstring w_s(w_l,L'\0');
+						MultiByteToWideChar(CP_UTF8, 0, s.c_str(), s.size(),&w_s[0],w_l);
+						if (!w_s.empty() && w_s.back() == '\0')
+						{
+							w_s.pop_back();
+						}
+						//»ñÈ¡µ±Ç°Ê±¼ä//
+						time_t now_one = time(0);//»ñÈ¡µ±Ç°Ê±¼ä£¬¾«È·µ½Ãë//
+						tm tm_one;//ÉùÃ÷Ò»¸ö½á¹¹Ìå£¬ÓÃÓÚ´æ´¢±¾µØÊ±¼äµÄ¸÷¸ö×é³É²¿·Ö//
+						localtime_s(&tm_one, &now_one);//½«now_one£¨ÊäÈë£©ÀïµÄÄÚÈİ¸´ÖÆµ½tm_oneÀïÊä³ö//
+						wchar_t timeBuffer_one[64];
+						wcsftime(timeBuffer_one, sizeof(timeBuffer_one) / sizeof(wchar_t), L"%Y-%m-%d %H:%M:%S", &tm_one);
+						//MessageBox(NULL, L"ÒÑ¾­×¼±¸ºÃÁËÊ±¼ä×Ö¶Î", L"QQ", MB_ICONINFORMATION);
+
+						std::wstring msg_one = L"[";
+						msg_one += timeBuffer_one;
+						msg_one += L"][";
+						msg_one += L"·şÎñÆ÷";
+						msg_one += L"->";
+						//ÓÃ»§êÇ³Æ
+						msg_one += w_nickname_s;
+						msg_one += L"]";
+						//MessageBox(NULL, L"ÒÑ¾­³É¹¦Æ´½ÓºÃ·şÎñÆ÷×Ö¶Î", L"QQ", MB_ICONINFORMATION);
+						msg_one += w_s.c_str();
+
+						//ÒÔÒ»¶¨µÄ¸ñÊ½ÏÔÊ¾¹ã²¥ĞÅÏ¢
+						int wlen_two = GetWindowTextLength(GetDlgItem(hwndDlg, IDC_EDIT27));//»ñÈ¡ÁÄÌì¿òÔ­ÓĞµÄÎÄ±¾,²»°üº¬'\0'//
+						std::wstring wstr_two(wlen_two + 1, 0);//·ÖÅä¿Õ¼ä//
+						GetWindowText(GetDlgItem(hwndDlg, IDC_EDIT27), &wstr_two[0], wlen_two + 1);
+						std::wstring fullmsg = L"";
+						if (wlen_two > 0)//Èç¹û²»ÊÇµÚÒ»ÌõÏûÏ¢¾Í½øĞĞ//
+						{
+							if (wstr_two.back() == L'\0')
+							{
+								wstr_two.pop_back();
+							}
+							fullmsg = wstr_two;
+
+							fullmsg += L"\r\n";
+						}
+						fullmsg +=msg_one;
+						SetDlgItemText(hwndDlg, IDC_EDIT27, fullmsg.c_str());//½«ÎÄ±¾ÏÔÊ¾ÔÚ¶Ô»°¿òÉÏ//
+						break;
+					}
+				}
+				i++;
+			}
+		}
 		case IDOK:
 		{
 			//»ñÈ¡ÎÄ±¾·¢ËÍÇøµÄÎÄ±¾//
@@ -1022,44 +1343,2539 @@ INT_PTR CALLBACK Dialog_eleven(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lP
 	return (INT_PTR)FALSE;
 }
 
+struct u
+{
+	std::vector <BYTE> img_data;
+	std::string nickname;
+	std::string inf;
+};
+std::vector<u> g_chartroom_inf;
+std::mutex g_chartroom_mutex;
+
+
+
 INT_PTR CALLBACK Dialog_twelve(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//ÁÄÌìÊÒ¶Ô»°¿ò//
 {
 	switch (uMsg)
 	{
 	case WM_INITDIALOG:
+	{
+
+		//½ûÓÃ·¢ËÍ°´Å¥
+		HWND hSendBtn = GetDlgItem(hwndDlg, IDOK);
+		EnableWindow(hSendBtn, false);
+
+		// Çå¿ÕÔ­ÓĞÏûÏ¢
+		{
+			std::lock_guard<std::mutex> lk(g_chartroom_mutex);
+			g_chartroom_inf.clear();
+		}
+
+		//ÇëÇó¼ÓÔØÁÄÌìÊÒÒÑÓĞµÄËùÓĞÏûÏ¢
+
+		std::string u_str = "ÇëÇó¼ÓÔØÁÄÌìÊÒµÄÏûÏ¢";
+		//·¢ËÍÇëÇó
+		int u_len = u_str.size();
+		send(g_clientSocket, (char*)&u_len, sizeof(u_len), 0);
+		send(g_clientSocket, u_str.c_str(), u_len, 0);
+
+		//OutputDebugStringA(("u_str is " + u_str + ", and its len is " + std::to_string(u_len) + "\n").c_str());
+
+		MessageBox(NULL, L"³É¹¦·¢ËÍ¼ÓÔØÁÄÌìÊÒÏûÏ¢µÄÇëÇó", L"QQ", MB_ICONINFORMATION);
+
+		int num = 0;
+		recv(g_clientSocket, (char*)&num, sizeof(num), 0);
+		MessageBox(NULL, L"³É¹¦½ÓÊÕÁÄÌìÊÒÏûÏ¢µÄ×ÜÌõÊı", L"QQ", MB_ICONINFORMATION);
+
+		if (num <= 0)
+		{
+			MessageBox(NULL, L"·şÎñÆ÷µÄÁÄÌìÊÒÁÄÌì¼ÇÂ¼Îª¿Õ", L"QQ", MB_ICONINFORMATION);
+			return(INT_PTR)TRUE;
+		}
+
+		//½ÓÊÕÁÄÌìÊÒÔ­ÓĞÁÄÌì¼ÇÂ¼Êı¾İ
+		int i = 0;
+		while (i < num)
+		{
+			i++;
+			u u_inf;
+			//½ÓÊÕÓÃ»§Í¼ÏñÊı¾İ
+			int img_len = 0;
+			recv(g_clientSocket, (char*)&img_len, sizeof(img_len), 0);
+			int r = 0;
+			int sum = 0;
+			BYTE* img_data = new BYTE[img_len];
+			while (sum < img_len)
+			{
+				r = recv(g_clientSocket, (char*)img_data + sum, img_len - sum, 0);
+				if (r > 0)
+				{
+					sum += r;
+				}
+			}
+			u_inf.img_data.insert(u_inf.img_data.end(), img_data, img_data + img_len);//´æ´¢Í¼Æ¬Êı¾İ
+			delete[]img_data;//ÊÍ·ÅÄÚ´æ£»
+
+			//½ÓÊÕÓÃ»§êÇ³Æ
+			int nickname_len = 0;
+			recv(g_clientSocket, (char*)&nickname_len, sizeof(nickname_len), 0);
+			std::string u_nickname(nickname_len, '\0');
+			recv(g_clientSocket, &u_nickname[0], nickname_len, 0);
+			u_inf.nickname = u_nickname;//´æ´¢ÓÃ»§êÇ³Æ
+
+			//½ÓÊÕÓÃ»§ÔÚÁÄÌìÊÒ·¢ËÍµÄÏûÏ¢
+			int chart_inf_len = 0;
+			recv(g_clientSocket, (char*)&chart_inf_len, sizeof(chart_inf_len), 0);
+			std::string chart_inf_str(chart_inf_len, '\0');
+			int x_r = 0;
+			int x_sum = 0;
+			while (x_sum < chart_inf_len)
+			{
+				x_r = recv(g_clientSocket, &chart_inf_str[0] + x_sum, chart_inf_len - x_sum, 0);
+				if (x_r > 0)
+				{
+					x_sum += x_r;
+				}
+			}
+			//recv(g_clientSocket, &chart_inf_str[0], chart_inf_len, 0);
+			u_inf.inf = chart_inf_str;//´æ´¢ÓÃ»§ÏûÏ¢
+
+			//½«ÏûÏ¢Ñ¹Èë¶ÓÁĞ
+			std::lock_guard <std::mutex>lk(g_chartroom_mutex);
+			g_chartroom_inf.push_back(u_inf);
+		}
+
+		//½«½ÓÊÕµÄÊı¾İ°´ÕÕÒ»¶¨µÄ¸ñÊ½ÏÔÊ¾ÔÚ¿Ø¼ş IDC_EDIT29ÉÏ
+		//¸ñÊ½ÎªÍ·ÏñÍ¼Æ¬Êı¾İ+êÇ³Æ+»»ĞĞ+ÏûÏ¢
+
+		// ÔÚ Dialog_twelve µÄ WM_INITDIALOG Ä©Î²Ìí¼Ó
+		//SendDlgItemMessage(hwndDlg, IDC_EDIT29, LB_SETITEMHEIGHT, 0,18*100); // Ã¿Ïî48ÏñËØ
+		// ¼ÓÔØÍêg_chartroom_infºó£¬²åÈëListBoxÏî
+		HWND hList1 = GetDlgItem(hwndDlg, IDC_EDIT29);
+		SendMessage(hList1, LB_RESETCONTENT, 0, 0);
+		for (size_t i = 0; i < g_chartroom_inf.size(); ++i)
+		{
+			SendDlgItemMessage(hwndDlg, IDC_EDIT29, LB_ADDSTRING, 0, (LPARAM)L"");
+		}
+
 		return (INT_PTR)TRUE;
+	}break;
+
+	
+	case WM_MEASUREITEM:
+	{
+		// ÈÃÃ¿Ïî¸ß¶È×ÔÊÊÓ¦ÄÚÈİ
+		LPMEASUREITEMSTRUCT lpmis = (LPMEASUREITEMSTRUCT)lParam;
+		if (lpmis->CtlID == IDC_EDIT29)
+		{
+			int idx = lpmis->itemID;
+
+			std::lock_guard<std::mutex> lk(g_chartroom_mutex);
+
+			if (idx >= 0 && idx < (int)g_chartroom_inf.size())
+			{
+				HWND hList2 = GetDlgItem(hwndDlg, IDC_EDIT29);
+				RECT rcListBox;
+				GetClientRect(hList2, &rcListBox);
+				int listBoxWidth = rcListBox.right - rcListBox.left;
+				int avatarSize = 40;
+				int leftPadding = 10;
+				int rightPadding = 8;
+				int contentWidth = listBoxWidth - (avatarSize + leftPadding + rightPadding);
+
+				// ¼ÆËãÏûÏ¢ÄÚÈİµÄ¸ß¶È
+				const u& item = g_chartroom_inf[idx];
+				std::wstring wmsg;
+				int wlen = MultiByteToWideChar(CP_UTF8, 0, item.inf.c_str(), (int)item.inf.size(), NULL, 0);
+				wmsg.resize(wlen);
+				MultiByteToWideChar(CP_UTF8, 0, item.inf.c_str(), (int)item.inf.size(), &wmsg[0], wlen);
+
+				HDC hdc = GetDC(hwndDlg);
+				RECT rcMsg = { 0, 0,contentWidth, 0 }; // Áô³öÍ·ÏñºÍ±ß¾à
+				DrawTextW(hdc, wmsg.c_str(), (int)wmsg.size(), &rcMsg, DT_WORDBREAK | DT_CALCRECT);
+				ReleaseDC(hwndDlg, hdc);
+
+				int nicknameHeight = 18;
+				int padding = 8;
+				int minHeight = avatarSize +8;
+				int contentHeight = rcMsg.bottom - rcMsg.top + nicknameHeight + padding;
+				lpmis->itemHeight = max(minHeight, contentHeight); // ÖÁÉÙÍ·Ïñ¸ß¶È
+			}
+			else
+			{
+				lpmis->itemHeight = 48;
+			}
+			return TRUE;
+		}
+		break;
+	}
+
+
+	case WM_DRAWITEM:
+	{
+		LPDRAWITEMSTRUCT lpdis = (LPDRAWITEMSTRUCT)lParam;
+		if (lpdis->CtlID == IDC_EDIT29) 
+		{
+			int idx = lpdis->itemID;
+			std::lock_guard<std::mutex> lk(g_chartroom_mutex);
+			if (idx >= 0 && idx < (int)g_chartroom_inf.size())
+			{
+				HWND hList3 = GetDlgItem(hwndDlg, IDC_EDIT29);
+				RECT rcListBox;
+				GetClientRect(hList3, &rcListBox);
+				int listBoxWidth = rcListBox.right - rcListBox.left;
+				int avatarSize = 40;
+				int leftPadding = 10;
+				int rightPadding = 8;
+				int contentWidth = listBoxWidth - (avatarSize + leftPadding + rightPadding);
+
+				const u& item = g_chartroom_inf[idx];
+
+				// ±³¾°
+				SetBkColor(lpdis->hDC, (lpdis->itemState & ODS_SELECTED) ? RGB(220, 240, 255) : RGB(255, 255, 255));
+				ExtTextOut(lpdis->hDC, 0, 0, ETO_OPAQUE, &lpdis->rcItem, NULL, 0, NULL);
+
+				// Í·Ïñ
+				if (!item.img_data.empty())
+				{
+					HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, item.img_data.size());
+					void* pMem = GlobalLock(hMem);
+					memcpy(pMem, item.img_data.data(), item.img_data.size());
+					GlobalUnlock(hMem);
+					IStream* pStream = NULL;
+					if (CreateStreamOnHGlobal(hMem, TRUE, &pStream) == S_OK)
+					{
+						Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromStream(pStream);
+						if (bmp && bmp->GetLastStatus() == Gdiplus::Ok)
+						{
+							Gdiplus::Graphics g(lpdis->hDC);
+							Gdiplus::Rect dest(lpdis->rcItem.left + 4, lpdis->rcItem.top + 4, avatarSize, avatarSize);
+							g.DrawImage(bmp, dest);
+							delete bmp;
+						}
+						pStream->Release();
+					}
+					GlobalFree(hMem);
+				}
+
+				// êÇ³Æ
+				std::wstring wnickname;
+				int wlen = MultiByteToWideChar(CP_UTF8, 0, item.nickname.c_str(), (int)item.nickname.size(), NULL, 0);
+				wnickname.resize(wlen);
+				MultiByteToWideChar(CP_UTF8, 0, item.nickname.c_str(), (int)item.nickname.size(), &wnickname[0], wlen);
+
+				RECT rcNick = lpdis->rcItem;
+				rcNick.left += avatarSize + 10;
+				rcNick.top += 4;
+				rcNick.bottom = rcNick.top + 18;
+				SetTextColor(lpdis->hDC, RGB(0, 102, 204));
+				DrawText(lpdis->hDC, wnickname.c_str(), (int)wnickname.size(), &rcNick, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+
+				// ÏûÏ¢ÄÚÈİ
+				std::wstring wmsg;
+				wlen = MultiByteToWideChar(CP_UTF8, 0, item.inf.c_str(), (int)item.inf.size(), NULL, 0);
+				wmsg.resize(wlen);
+				MultiByteToWideChar(CP_UTF8, 0, item.inf.c_str(), (int)item.inf.size(), &wmsg[0], wlen);
+
+				RECT rcMsg = lpdis->rcItem;
+				rcMsg.left += avatarSize + 10;
+				rcMsg.top += 24;
+				rcMsg.right = rcMsg.left+contentWidth;
+				SetTextColor(lpdis->hDC, RGB(0, 0, 0));
+				DrawText(lpdis->hDC, wmsg.c_str(), (int)wmsg.size(), &rcMsg, DT_LEFT | DT_WORDBREAK);
+
+				// Ñ¡ÖĞ±ß¿ò
+				if (lpdis->itemState & ODS_SELECTED)
+					DrawFocusRect(lpdis->hDC, &lpdis->rcItem);
+			}
+			return (INT_PTR)TRUE;
+		}
+	}break;
+
 	case WM_COMMAND:
+	{
+		if (HIWORD(wParam) == EN_CHANGE && LOWORD(wParam) == IDC_EDIT30)
+		{
+			HWND hEdit = GetDlgItem(hwndDlg, IDC_EDIT30);
+			HWND hSendBtn = GetDlgItem(hwndDlg, IDOK);
+			int len = GetWindowTextLength(hEdit);
+			EnableWindow(hSendBtn, len > 0);
+		}
 		switch (LOWORD(wParam))
 		{
 		case IDOK:
-			EndDialog(hwndDlg, IDOK);
+		{
+			// Çå¿ÕÔ­ÓĞÏûÏ¢
+			{
+				std::lock_guard<std::mutex> lk(g_chartroom_mutex);
+				g_chartroom_inf.clear();
+			}
+
+			std::string inf = "·¢ËÍ";
+			int utf8_string_len = inf.size();
+			send(g_clientSocket, (char*)&utf8_string_len, sizeof(utf8_string_len), 0);
+			send(g_clientSocket, inf.c_str(), inf.size(), 0);
+
+			//»ñÈ¡¿Ø¼ş¾ä±ú
+			HWND h = GetDlgItem(hwndDlg, IDC_EDIT30);
+			//»ñÈ¡¿Ø¼şÎÄ±¾³¤¶È
+			int text_len = GetWindowTextLength(h);
+			if (text_len <= 0)
+			{
+				MessageBox(NULL, L"·¢ËÍµÄÏûÏ¢²»ÄÜÎª¿Õ", L"QQ", MB_ICONERROR);
+				return (INT_PTR)TRUE;
+			}
+			std::wstring w_text(text_len + 1, L'\0');
+			GetWindowText(h, &w_text[0], text_len + 1);//ÏûÏ¢º¬'\0'
+			//×ª»»¿í×Ö·û´®
+			int utf8_text_len = WideCharToMultiByte(CP_UTF8, 0, w_text.c_str(), text_len + 1, NULL, 0, NULL, NULL);
+			std::string utf8_text_str(utf8_text_len, '\0');
+			WideCharToMultiByte(CP_UTF8, 0, w_text.c_str(), text_len + 1, &utf8_text_str[0], utf8_text_len, NULL, NULL);
+			//½«ÎÄ±¾ÏûÏ¢·¢ËÍ
+			send(g_clientSocket, (char*)&utf8_text_len, sizeof(utf8_text_len), 0);
+			send(g_clientSocket, utf8_text_str.c_str(), utf8_text_len, 0);
+
+
+			//½«ÏûÏ¢±à¼­¿òÇå¿Õ
+			SetDlgItemText(hwndDlg, IDC_EDIT30, L"");
+			//¼ì²â¿Ø¼şIDC_EDIT30ÊÇ·ñÓĞÎÄ±¾£¬ÈôÎŞÔò½ûÓÃ·¢ËÍ°´Å¥
+			HWND hSendBtn = GetDlgItem(hwndDlg, IDOK);
+			EnableWindow(hSendBtn, false);
+
+
+
+			//½ÓÊÕ·şÎñÆ÷µÄ¸üĞÂÍ¨Öª
+			int len = 0;
+			recv(g_clientSocket, (char*)&len, sizeof(len), 0);
+			std::string str(len, '\0');
+			recv(g_clientSocket, &str[0], len, 0);
+			if (strcmp(str.c_str(), "Çë¸üĞÂÁÄÌìÊÒÏûÏ¢") != 0)
+			{
+				MessageBox(NULL, L"Î´ÄÜ¸ù¾İ·şÎñÆ÷Ö¸ÁîÕıÈ·¸üĞÂÁÄÌìÊÒµÄÏûÏ¢", L"QQ", MB_ICONERROR);
+			}
+
+			//Í¨Öª³õÊ¼»¯ÏûÏ¢ÔÙÖ´ĞĞÒ»´Î
+			// Çå¿ÕÔ­ÓĞÏûÏ¢
+			{
+				std::lock_guard<std::mutex> lk(g_chartroom_mutex);
+				g_chartroom_inf.clear();
+			}
+
+			//ÇëÇó¼ÓÔØÁÄÌìÊÒÒÑÓĞµÄËùÓĞÏûÏ¢
+
+			std::string u_str = "ÇëÇó¼ÓÔØÁÄÌìÊÒµÄÏûÏ¢";
+			//·¢ËÍÇëÇó
+			int u_len = u_str.size();
+			send(g_clientSocket, (char*)&u_len, sizeof(u_len), 0);
+			send(g_clientSocket, u_str.c_str(), u_len, 0);
+
+			//OutputDebugStringA(("u_str is " + u_str + ", and its len is " + std::to_string(u_len) + "\n").c_str());
+
+			MessageBox(NULL, L"³É¹¦·¢ËÍ¼ÓÔØÁÄÌìÊÒÏûÏ¢µÄÇëÇó", L"QQ", MB_ICONINFORMATION);
+
+			int num = 0;
+			recv(g_clientSocket, (char*)&num, sizeof(num), 0);
+			MessageBox(NULL, L"³É¹¦½ÓÊÕÁÄÌìÊÒÏûÏ¢µÄ×ÜÌõÊı", L"QQ", MB_ICONINFORMATION);
+
+			if (num <= 0)
+			{
+				MessageBox(NULL, L"·şÎñÆ÷µÄÁÄÌìÊÒÁÄÌì¼ÇÂ¼Îª¿Õ", L"QQ", MB_ICONINFORMATION);
+				return(INT_PTR)TRUE;
+			}
+
+			//½ÓÊÕÁÄÌìÊÒÔ­ÓĞÁÄÌì¼ÇÂ¼Êı¾İ
+			int i = 0;
+			while (i < num)
+			{
+				i++;
+				u u_inf;
+				//½ÓÊÕÓÃ»§Í¼ÏñÊı¾İ
+				int img_len = 0;
+				recv(g_clientSocket, (char*)&img_len, sizeof(img_len), 0);
+				int r = 0;
+				int sum = 0;
+				BYTE* img_data = new BYTE[img_len];
+				while (sum < img_len)
+				{
+					r = recv(g_clientSocket, (char*)img_data + sum, img_len - sum, 0);
+					if (r > 0)
+					{
+						sum += r;
+					}
+				}
+				u_inf.img_data.insert(u_inf.img_data.end(), img_data, img_data + img_len);//´æ´¢Í¼Æ¬Êı¾İ
+				delete[]img_data;//ÊÍ·ÅÄÚ´æ£»
+
+				//½ÓÊÕÓÃ»§êÇ³Æ
+				int nickname_len = 0;
+				recv(g_clientSocket, (char*)&nickname_len, sizeof(nickname_len), 0);
+				std::string u_nickname(nickname_len, '\0');
+				recv(g_clientSocket, &u_nickname[0], nickname_len, 0);
+				u_inf.nickname = u_nickname;//´æ´¢ÓÃ»§êÇ³Æ
+
+				//½ÓÊÕÓÃ»§ÔÚÁÄÌìÊÒ·¢ËÍµÄÏûÏ¢
+				int chart_inf_len = 0;
+				recv(g_clientSocket, (char*)&chart_inf_len, sizeof(chart_inf_len), 0);
+				std::string chart_inf_str(chart_inf_len, '\0');
+				recv(g_clientSocket, &chart_inf_str[0], chart_inf_len, 0);
+				u_inf.inf = chart_inf_str;//´æ´¢ÓÃ»§ÏûÏ¢
+
+				OutputDebugStringA(("the information user send in chartroom is"+chart_inf_str+"\n").c_str());
+
+				//½«ÏûÏ¢Ñ¹Èë¶ÓÁĞ
+				std::lock_guard <std::mutex>lk(g_chartroom_mutex);
+				g_chartroom_inf.push_back(u_inf);
+			}
+
+			//½«½ÓÊÕµÄÊı¾İ°´ÕÕÒ»¶¨µÄ¸ñÊ½ÏÔÊ¾ÔÚ¿Ø¼ş IDC_EDIT29ÉÏ
+			//¸ñÊ½ÎªÍ·ÏñÍ¼Æ¬Êı¾İ+êÇ³Æ+»»ĞĞ+ÏûÏ¢
+
+			// ÔÚ Dialog_twelve µÄ WM_INITDIALOG Ä©Î²Ìí¼Ó
+			//SendDlgItemMessage(hwndDlg, IDC_EDIT29, LB_SETITEMHEIGHT, 0, 18*100); // Ã¿Ïî48ÏñËØ
+			// ¼ÓÔØÍêg_chartroom_infºó£¬²åÈëListBoxÏî
+			HWND hList4 = GetDlgItem(hwndDlg, IDC_EDIT29);
+			SendMessage(hList4, LB_RESETCONTENT, 0, 0);
+			for (size_t i = 0; i < g_chartroom_inf.size(); ++i)
+			{
+				SendDlgItemMessage(hwndDlg, IDC_EDIT29, LB_ADDSTRING, 0, (LPARAM)L"");
+			}
+
 			return (INT_PTR)TRUE;
+		}
+
+
+		case IDC_UPDATEINFORMATION:
+		{
+			// Çå¿ÕÔ­ÓĞÏûÏ¢
+			{
+				std::lock_guard<std::mutex> lk(g_chartroom_mutex);
+				g_chartroom_inf.clear();
+			}
+
+			std::string inf = "¸üĞÂÏûÏ¢";
+			int utf8_string_len = inf.size();
+			send(g_clientSocket, (char*)&utf8_string_len, sizeof(utf8_string_len), 0);
+			send(g_clientSocket, inf.c_str(), inf.size(), 0);
+
+			//ÇëÇó¼ÓÔØÁÄÌìÊÒÒÑÓĞµÄËùÓĞÏûÏ¢
+
+			std::string u_str = "ÇëÇó¼ÓÔØÁÄÌìÊÒµÄÏûÏ¢";
+			//·¢ËÍÇëÇó
+			int u_len = u_str.size();
+			send(g_clientSocket, (char*)&u_len, sizeof(u_len), 0);
+			send(g_clientSocket, u_str.c_str(), u_len, 0);
+
+			//OutputDebugStringA(("u_str is " + u_str + ", and its len is " + std::to_string(u_len) + "\n").c_str());
+
+			MessageBox(NULL, L"³É¹¦·¢ËÍ¼ÓÔØÁÄÌìÊÒÏûÏ¢µÄÇëÇó", L"QQ", MB_ICONINFORMATION);
+
+			int num = 0;
+			recv(g_clientSocket, (char*)&num, sizeof(num), 0);
+			MessageBox(NULL, L"³É¹¦½ÓÊÕÁÄÌìÊÒÏûÏ¢µÄ×ÜÌõÊı", L"QQ", MB_ICONINFORMATION);
+
+			if (num <= 0)
+			{
+				MessageBox(NULL, L"·şÎñÆ÷µÄÁÄÌìÊÒÁÄÌì¼ÇÂ¼Îª¿Õ", L"QQ", MB_ICONINFORMATION);
+				return(INT_PTR)TRUE;
+			}
+
+			//½ÓÊÕÁÄÌìÊÒÔ­ÓĞÁÄÌì¼ÇÂ¼Êı¾İ
+			int i = 0;
+			while (i < num)
+			{
+				i++;
+				u u_inf;
+				//½ÓÊÕÓÃ»§Í¼ÏñÊı¾İ
+				int img_len = 0;
+				recv(g_clientSocket, (char*)&img_len, sizeof(img_len), 0);
+				int r = 0;
+				int sum = 0;
+				BYTE* img_data = new BYTE[img_len];
+				while (sum < img_len)
+				{
+					r = recv(g_clientSocket, (char*)img_data + sum, img_len - sum, 0);
+					if (r > 0)
+					{
+						sum += r;
+					}
+				}
+				u_inf.img_data.insert(u_inf.img_data.end(), img_data, img_data + img_len);//´æ´¢Í¼Æ¬Êı¾İ
+				delete[]img_data;//ÊÍ·ÅÄÚ´æ£»
+
+				//½ÓÊÕÓÃ»§êÇ³Æ
+				int nickname_len = 0;
+				recv(g_clientSocket, (char*)&nickname_len, sizeof(nickname_len), 0);
+				std::string u_nickname(nickname_len, '\0');
+				recv(g_clientSocket, &u_nickname[0], nickname_len, 0);
+				u_inf.nickname = u_nickname;//´æ´¢ÓÃ»§êÇ³Æ
+
+				//½ÓÊÕÓÃ»§ÔÚÁÄÌìÊÒ·¢ËÍµÄÏûÏ¢
+				int chart_inf_len = 0;
+				recv(g_clientSocket, (char*)&chart_inf_len, sizeof(chart_inf_len), 0);
+				std::string chart_inf_str(chart_inf_len, '\0');
+				recv(g_clientSocket, &chart_inf_str[0], chart_inf_len, 0);
+				u_inf.inf = chart_inf_str;//´æ´¢ÓÃ»§ÏûÏ¢
+
+				OutputDebugStringA(("the information user send in chartroom is" + chart_inf_str + "\n").c_str());
+
+				//½«ÏûÏ¢Ñ¹Èë¶ÓÁĞ
+				std::lock_guard <std::mutex>lk(g_chartroom_mutex);
+				g_chartroom_inf.push_back(u_inf);
+			}
+
+			//½«½ÓÊÕµÄÊı¾İ°´ÕÕÒ»¶¨µÄ¸ñÊ½ÏÔÊ¾ÔÚ¿Ø¼ş IDC_EDIT29ÉÏ
+			//¸ñÊ½ÎªÍ·ÏñÍ¼Æ¬Êı¾İ+êÇ³Æ+»»ĞĞ+ÏûÏ¢
+
+			// ÔÚ Dialog_twelve µÄ WM_INITDIALOG Ä©Î²Ìí¼Ó
+			//SendDlgItemMessage(hwndDlg, IDC_EDIT29, LB_SETITEMHEIGHT, 0, 18*100); // Ã¿Ïî48ÏñËØ
+			// ¼ÓÔØÍêg_chartroom_infºó£¬²åÈëListBoxÏî
+			HWND hList5 = GetDlgItem(hwndDlg, IDC_EDIT29);
+			SendMessage(hList5, LB_RESETCONTENT, 0, 0);
+			for (size_t i = 0; i < g_chartroom_inf.size(); ++i)
+			{
+				SendDlgItemMessage(hwndDlg, IDC_EDIT29, LB_ADDSTRING, 0, (LPARAM)L"");
+			}
+
+			return (INT_PTR)TRUE;
+		}
 		case IDCANCEL:
+		{
+			std::string inf = "ÍË³ö";
+			int utf8_string_len = inf.size();
+			send(g_clientSocket, (char*)&utf8_string_len, sizeof(utf8_string_len), 0);
+			send(g_clientSocket, inf.c_str(), inf.size(), 0);
+
+			MessageBox(NULL, L"³É¹¦·¢ËÍÍË³ö°´Å¥£¨WM_COMMAND£©", L"QQ", MB_ICONINFORMATION);
 			EndDialog(hwndDlg, IDCANCEL);
 			return (INT_PTR)TRUE;
 		}
+		}
 	}
+	/*
+	case WM_CLOSE:
+	{
+		std::string inf = "ÍË³ö";
+		int utf8_string_len = inf.size();
+		send(g_clientSocket, (char*)&utf8_string_len, sizeof(utf8_string_len), 0);
+		send(g_clientSocket, inf.c_str(), inf.size(), 0);
+
+		MessageBox(NULL, L"³É¹¦·¢ËÍÍË³ö°´Å¥£¨WM_CLOSE£©", L"QQ", MB_ICONERROR);
+		EndDialog(hwndDlg, IDCANCEL);
+		return (INT_PTR)TRUE;
+	}
+	*/
+	}
+	
 	return (INT_PTR)FALSE;
 }
+
+//¼ÇÂ¼ÓÃ»§ºÃÓÑµÄÕËºÅ¡¢êÇ³ÆºÍÍ·Ïñ
+struct user_friend
+{
+	int signal;
+	std::string account;
+	std::string nickname;
+	std::vector<BYTE> image;
+};
+std::vector <user_friend> g_user_friends;
+
+
+//¼ÇÂ¼ÓÃ»§ºÃÓÑµÄÕËºÅ¡¢êÇ³ÆºÍÍ·Ïñ
+struct user_half_friend
+{
+	std::string account;
+	std::string nickname;
+	std::vector<BYTE> image;
+};
+std::vector <user_half_friend> g_user_half_friends;
+
+
+INT_PTR CALLBACK Dialog_seventeen(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//ĞÂÅóÓÑÁĞ±í¿ò
+{
+	switch (uMsg)
+	{
+	case WM_INITDIALOG:
+	{
+		//Ïò·şÎñÆ÷·¢ËÍ¼ÓÔØĞÂÅóÓÑÁĞ±íµÄÇëÇó
+		std::string request_to_server = "¿Í»§¶ËÇëÇó¼ÓÔØĞÂÅóÓÑÁĞ±í";
+		int request_len = request_to_server.size();
+		send(g_clientSocket, (char*)&request_len,sizeof(request_len),0);
+		send(g_clientSocket, request_to_server.c_str(), request_len, 0);
+
+		char* buf_x1 = new char[50]();
+		snprintf(buf_x1, 50, "the request_to_server is %s\n",request_to_server.c_str());
+		OutputDebugStringA(buf_x1);
+		delete[]buf_x1;
+
+		//½ÓÊÕ·şÎñÆ÷·µ»ØµÄÏûÏ¢
+
+		int r_len = 0;
+		recv(g_clientSocket, (char*)&r_len, sizeof(r_len), 0);
+		std::string s_str(r_len, '\0');
+		recv(g_clientSocket, &s_str[0], r_len, 0);
+
+		char* buf_x2 = new char[50]();
+		snprintf(buf_x2, 50, "the s_str is %s\n", s_str.c_str());
+		OutputDebugStringA(buf_x2);
+		delete[]buf_x2;
+
+		//±È½Ï½ÓÊÜµÄ×Ö·û´®
+		if (strcmp("success",s_str.c_str()) == 0)
+		{
+			MessageBox(NULL,L"·şÎñÆ÷ÒÑ¾­³É¹¦¼ÓÔØĞÂÅóÓÑÁĞ±í",L"QQ",MB_ICONINFORMATION);
+		}
+		else if(strcmp("failure", s_str.c_str()) == 0)
+		{
+			MessageBox(NULL, L"·şÎñÆ÷ÎŞ·¨¼ÓÔØĞÂÅóÓÑÁĞ±í,¼´½«·µ»ØºÃÓÑ¿ò", L"QQ", MB_ICONERROR);
+			//³õÊ¼»¯Ê§°Ü£¬¹Ø±Õ¶Ô»°¿ò£¬·µ»ØºÃÓÑ¿ò
+			EndDialog(hwndDlg,IDCANCEL);
+			return (INT_PTR)TRUE;
+		}
+
+		//½ÓÊÕĞÂÅóÓÑÌõÊı
+		int half_len = 0;
+		recv(g_clientSocket, (char*)&half_len, sizeof(half_len), 0);
+
+		//ÌõÊıÎª0£¬³õÊ¼»¯½áÊø
+		if (half_len == 0)
+		{
+			MessageBox(NULL, L"ÄúÔİÊ±»¹Ã»ÓĞĞÂÅóÓÑ£¬¼´½«·µ»ØºÃÓÑ¿ò", L"QQ", MB_ICONINFORMATION);
+			EndDialog(hwndDlg, IDCANCEL);
+			return(INT_PTR)TRUE;
+		}
+
+		//ÌõÊı²»Îª0£¬ÏòÏµÍ³·¢ËÍÁĞ±íÏîÊıÇëÇó
+		else if(half_len>0)
+		{
+			MessageBox(NULL, L"¼´½«½ÓÊÜÀ´×Ô·şÎñÆ÷µÄĞÂÅóÓÑÊı¾İ", L"QQ", MB_ICONINFORMATION);
+
+
+			//½ÓÊÕºÃÓÑÁĞ±íµÄÏûÏ¢¼¯
+			int i = 0;
+			g_user_half_friends.clear();//È·±£ºÃÓÑÏûÏ¢¶ÓÁĞÇå¿Õ
+			user_half_friend u_x;
+			while (i < half_len)
+			{
+				u_x= user_half_friend();//Çå¿Õ½á¹¹Ìå
+
+				//½ÓÊÕºÃÓÑÕËºÅ
+				int account_x_len = 0;
+				recv(g_clientSocket, (char*)&account_x_len, sizeof(account_x_len), 0);
+				u_x.account.resize(account_x_len);//ÖØĞÂ·ÖÅä¿Õ¼ä
+				recv(g_clientSocket, &u_x.account[0], account_x_len, 0);
+
+				char* buf = new char[50]();
+				snprintf(buf, 50, "the friend_account is %s\n", u_x.account.c_str());
+				OutputDebugStringA(buf);
+				delete[]buf;
+
+				//½ÓÊÕºÃÓÑêÇ³Æ
+				int nickname_x_len = 0;
+				recv(g_clientSocket, (char*)&nickname_x_len, sizeof(nickname_x_len), 0);
+				u_x.nickname.resize(nickname_x_len);//ÖØĞÂ·ÖÅä¿Õ¼ä
+				recv(g_clientSocket, &u_x.nickname[0], nickname_x_len, 0);
+
+				char* buf_2 = new char[50]();
+				snprintf(buf_2, 50, "the friend_nickname is %s\n", u_x.nickname.c_str());
+				OutputDebugStringA(buf_2);
+				delete[]buf_2;
+
+				//½ÓÊÕºÃÓÑÍ·Ïñ
+				int image_x_len = 0;
+				recv(g_clientSocket, (char*)&image_x_len, sizeof(image_x_len), 0);
+
+
+				char* buf_3 = new char[50]();
+				snprintf(buf_3, 50, "the friend_photo_len is %d\n", image_x_len);
+				OutputDebugStringA(buf_3);
+				delete[]buf_3;
+
+
+				u_x.image.resize(image_x_len);//ÖØĞÂ·ÖÅä¿Õ¼ä
+				int  u_r = 0;
+				int u_sum = 0;
+				while (u_sum < image_x_len)
+				{
+					u_r = recv(g_clientSocket, (char*)u_x.image.data() + u_sum, image_x_len - u_sum, 0);
+					if (u_r > 0)
+					{
+						u_sum += u_r;
+					}
+				}
+				//½ÓÊÕÍê±Ï£¬½«ºÃÓÑµÄĞÅÏ¢Ñ¹Èëµ¯¼Ğ
+				g_user_half_friends.push_back(u_x);
+
+				i++;
+			}
+
+			MessageBox(NULL, L"ÒÑ¾­³É¹¦½ÓÊÕÓÃ»§µÄºÃÓÑÏûÏ¢", L"QQ", MB_ICONINFORMATION);
+
+			HWND hList6 = GetDlgItem(hwndDlg, IDC_EDIT49);
+			SendMessage(hList6, LB_RESETCONTENT, 0, 0);//Çå¿ÕÁĞ±í¿ò
+			for (size_t i = 0; i < g_user_half_friends.size(); ++i)
+			{
+				SendDlgItemMessage(hwndDlg, IDC_EDIT49, LB_ADDSTRING, 0, (LPARAM)L"");
+				SendDlgItemMessage(hwndDlg, IDC_EDIT49, LB_SETITEMHEIGHT, i, 48); // Ã¿Ïî48ÏñËØ
+			}
+			
+			SendMessage(hList6, LB_SETSEL, FALSE, -1);//È¡ÏûËùÓĞÑ¡ÖĞÏî//
+			LONG style = GetWindowLong(hList6, GWL_STYLE);//»ñÈ¡µ±Ç°¿Ø¼şµÄÑùÊ½//
+			style &= ~(LBS_SINGLESEL);//Çå³ıLBS_OWNERDRAWFIXEDÑùÊ½//
+			style |= LBS_MULTIPLESEL;  // Ôö¼Ó¶àÑ¡£¬Ö§³ÖCtrl/Shift
+			SetWindowLong(hList6, GWL_STYLE, style); // Ó¦ÓÃĞÂÑùÊ½
+
+			HWND hBtn_y = GetDlgItem(hwndDlg, IDOK); //²¥°´Å¥¾ä±ú//
+			EnableWindow(hBtn_y, FALSE); // ³õÊ¼½ûÓÃÍ¬Òâ°´Å¥
+
+			HWND hBtn_x = GetDlgItem(hwndDlg, IDC_REJECT); //²¥°´Å¥¾ä±ú//
+			EnableWindow(hBtn_x, FALSE); // ³õÊ¼½ûÓÃ¾Ü¾ø°´Å¥
+
+			return (INT_PTR)TRUE;
+		}
+
+	}break;
+
+	case WM_DRAWITEM:
+	{
+		LPDRAWITEMSTRUCT lpdis = (LPDRAWITEMSTRUCT)lParam;
+		if (lpdis->CtlID == IDC_EDIT49)
+		{
+			int idx = lpdis->itemID;
+			if (idx >= 0 && idx < (int)g_user_half_friends.size())
+			{
+				HWND hList7 = GetDlgItem(hwndDlg, IDC_EDIT49);
+				RECT rcListBox;
+				GetClientRect(hList7, &rcListBox);
+				int listBoxWidth = rcListBox.right - rcListBox.left;
+				int avatarSize = 40;
+				int leftPadding = 10;
+				int rightPadding = 8;
+				int contentWidth = listBoxWidth - (avatarSize + leftPadding + rightPadding);
+
+				const user_half_friend& item = g_user_half_friends[idx];
+
+				// ±³¾°
+				SetBkColor(lpdis->hDC, (lpdis->itemState & ODS_SELECTED) ? RGB(230, 230, 250) : RGB(255, 255, 255));
+				ExtTextOut(lpdis->hDC, 0, 0, ETO_OPAQUE, &lpdis->rcItem, NULL, 0, NULL);
+
+				// Í·Ïñ
+				if (!item.image.empty())
+				{
+					HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, item.image.size());
+					void* pMem = GlobalLock(hMem);
+					memcpy(pMem, item.image.data(), item.image.size());
+					GlobalUnlock(hMem);
+					IStream* pStream = NULL;
+					if (CreateStreamOnHGlobal(hMem, TRUE, &pStream) == S_OK)
+					{
+						Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromStream(pStream);
+						if (bmp && bmp->GetLastStatus() == Gdiplus::Ok)
+						{
+							Gdiplus::Graphics g(lpdis->hDC);
+							Gdiplus::Rect dest(lpdis->rcItem.left + 4, lpdis->rcItem.top + 4, avatarSize, avatarSize);
+							g.DrawImage(bmp, dest);
+							delete bmp;
+						}
+						pStream->Release();
+					}
+					GlobalFree(hMem);
+				}
+
+				// êÇ³Æ
+				std::wstring wnickname;
+				int wlen = MultiByteToWideChar(CP_UTF8, 0, item.nickname.c_str(), (int)item.nickname.size(), NULL, 0);
+				wnickname.resize(wlen);
+				MultiByteToWideChar(CP_UTF8, 0, item.nickname.c_str(), (int)item.nickname.size(), &wnickname[0], wlen);
+
+				RECT rcNick = lpdis->rcItem;
+				rcNick.left += avatarSize + 10;
+				rcNick.top += 4;
+				rcNick.bottom = rcNick.top + 18;
+				SetTextColor(lpdis->hDC, RGB(0, 102, 204));
+				//DrawText(lpdis->hDC, wnickname.c_str(), (int)wnickname.size(), &rcNick, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_CALCRECT);
+				DrawText(lpdis->hDC, wnickname.c_str(), (int)wnickname.size(), &rcNick, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+			
+
+
+				// ÕËºÅÄÚÈİ
+				std::wstring waccount;
+				wlen = MultiByteToWideChar(CP_UTF8, 0, item.account.c_str(), (int)item.account.size(), NULL, 0);
+				waccount.resize(wlen);
+				MultiByteToWideChar(CP_UTF8, 0, item.account.c_str(), (int)item.account.size(), &waccount[0], wlen);
+
+				RECT rcAcc = lpdis->rcItem;
+				rcAcc.left += avatarSize + 10;
+				rcAcc.top += 24;
+				rcAcc.bottom = rcAcc.top + 18;
+				SetTextColor(lpdis->hDC, RGB(0, 0, 0));
+				DrawText(lpdis->hDC, waccount.c_str(), (int)waccount.size(), &rcAcc, DT_LEFT | DT_SINGLELINE);
+
+				// Ñ¡ÖĞ±ß¿ò
+				if (lpdis->itemState & ODS_FOCUS)
+					DrawFocusRect(lpdis->hDC, &lpdis->rcItem);
+			}
+
+			return (INT_PTR)TRUE;
+		}
+	}break;
+
+
+	case WM_COMMAND:
+	{
+		HWND hList8 = GetDlgItem(hwndDlg, IDC_EDIT49);
+
+		HWND hBtn1 = GetDlgItem(hwndDlg, IDOK);
+		HWND hBtn2 = GetDlgItem(hwndDlg, IDC_REJECT);
+		if (HIWORD(wParam) == LBN_SELCHANGE && LOWORD(wParam) == IDC_EDIT49)
+		{
+			int selCount = (int)SendMessage(hList8, LB_GETSELCOUNT, 0, 0);
+			EnableWindow(hBtn1, selCount > 0 ? TRUE : FALSE);
+			EnableWindow(hBtn2, selCount > 0 ? TRUE : FALSE);
+		}
+
+		switch (LOWORD(wParam))
+		{
+
+		case IDOK:
+		{
+			std::vector <std::string> new_friend_account;
+			new_friend_account.clear();
+			
+			int selCount_x = (int)SendMessage(hList8, LB_GETSELCOUNT, 0, 0);
+
+			char* buf_111 = new char[50];
+			snprintf(buf_111,strlen(buf_111),"the selCount_x is %d\n",selCount_x);
+			OutputDebugStringA(buf_111);
+			delete[]buf_111;
+
+			if (selCount_x > 0)
+			{
+				std::vector<int> selItems(selCount_x, 0);
+				SendMessage(hList8, LB_GETSELITEMS, selCount_x, (LPARAM)selItems.data());
+
+				for (int i = 0; i < selCount_x; ++i)
+				{
+					int itemIdx = selItems[i];
+					if (itemIdx < 0 || itemIdx >= (int)g_user_half_friends.size())
+					{
+						continue;
+					}
+					const std::string& account = g_user_half_friends[itemIdx].account;
+					
+					char* buf_112 = new char[50];
+					snprintf(buf_112, strlen(buf_112), "the g_user_half_friends[%d].account is %s\n",i,account.c_str());
+					OutputDebugStringA(buf_112);
+					delete[]buf_112;
+
+					new_friend_account.push_back(account);//½«È«²¿Ñ¡ÖĞµÄÓÃ»§ÕËºÅ´æ´¢
+
+				}
+			}
+
+			//SendMessage(hList, LB_SETSEL, FALSE, -1);//È¡ÏûËùÓĞÑ¡ÖĞÏî//
+			
+			//Ïò·şÎñÆ÷·¢ËÍÈ·¶¨ÏûÏ¢
+			std::string buf = "Í¬Òâ";
+			int buf_len = buf.size();
+			send(g_clientSocket, (char*)&buf_len, sizeof(buf_len), 0);
+			send(g_clientSocket, buf.c_str(), buf_len, 0);
+
+			//ÏÈ·¢ËÍÍ¬ÒâµÄĞÂÅóÓÑÊıÄ¿
+			send(g_clientSocket, (char*)&selCount_x, sizeof(selCount_x), 0);
+
+			//Ïò·şÎñÆ÷·¢ËÍ¾­ÓÃ»§Í¬ÒâµÄĞÂÅóÓÑÕËºÅ
+			for (auto it=new_friend_account.begin();it!=new_friend_account.end();)
+			{
+				std::string x = *it;
+
+				int s_l = x.size();
+				send(g_clientSocket, (char*)&s_l, sizeof(s_l), 0);
+                send(g_clientSocket, x.c_str(), s_l, 0);
+				
+				char* buf_115 = new char[50];
+				snprintf(buf_115, strlen(buf_115), "the x is %s\n",x.c_str());
+				OutputDebugStringA(buf_115);
+				delete[]buf_115;
+
+				it++;
+			}
+
+			int cc_l = 0;
+			recv(g_clientSocket, (char*)&cc_l, sizeof(cc_l), 0);
+			std::string cc(cc_l, '\0');
+			recv(g_clientSocket, &cc[0], cc_l, 0);
+
+			if (strcmp("success", cc.c_str()) == 0)
+			{
+				MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­¸üĞÂÄúµÄºÃÓÑÁĞ±íºÍĞÂÅóÓÑÁĞ±í£¬¼´½«»Øµ½ºÃÓÑ¿ò", L"QQ", MB_ICONINFORMATION);
+				EndDialog(hwndDlg,IDOK);
+				return(INT_PTR)TRUE;
+			}
+			return (INT_PTR)TRUE;
+		}
+
+		case IDC_REJECT:
+		{
+			
+			std::vector <std::string> new_friend_account;
+			new_friend_account.clear();
+
+			int selCount_x = (int)SendMessage(hList8, LB_GETSELCOUNT, 0, 0);
+
+			char* buf_111 = new char[50];
+			snprintf(buf_111, strlen(buf_111), "the selCount_x is %d\n", selCount_x);
+			OutputDebugStringA(buf_111);
+			delete[]buf_111;
+
+			if (selCount_x > 0)
+			{
+				std::vector<int> selItems(selCount_x, 0);
+				SendMessage(hList8, LB_GETSELITEMS, selCount_x, (LPARAM)selItems.data());
+
+				for (int i = 0; i < selCount_x; ++i)
+				{
+					int itemIdx = selItems[i];
+					if (itemIdx < 0 || itemIdx >= (int)g_user_half_friends.size())
+					{
+						continue;
+					}
+					const std::string& account = g_user_half_friends[itemIdx].account;
+
+					char* buf_112 = new char[50];
+					snprintf(buf_112, strlen(buf_112), "the g_user_half_friends[%d].account is %s\n", i, account.c_str());
+					OutputDebugStringA(buf_112);
+					delete[]buf_112;
+
+					new_friend_account.push_back(account);//½«È«²¿Ñ¡ÖĞµÄÓÃ»§ÕËºÅ´æ´¢
+
+				}
+			}
+
+			//SendMessage(hList, LB_SETSEL, FALSE, -1);//È¡ÏûËùÓĞÑ¡ÖĞÏî//
+
+			//Ïò·şÎñÆ÷·¢ËÍÈ·¶¨ÏûÏ¢
+			std::string buf = "¾Ü¾ø";
+			int buf_len = buf.size();
+			send(g_clientSocket, (char*)&buf_len, sizeof(buf_len), 0);
+			send(g_clientSocket, buf.c_str(), buf_len, 0);
+
+			//ÏÈ·¢ËÍÍ¬ÒâµÄĞÂÅóÓÑÊıÄ¿
+			send(g_clientSocket, (char*)&selCount_x, sizeof(selCount_x), 0);
+
+			//Ïò·şÎñÆ÷·¢ËÍ¾­ÓÃ»§Í¬ÒâµÄĞÂÅóÓÑÕËºÅ
+			for (auto it = new_friend_account.begin(); it != new_friend_account.end();)
+			{
+				std::string x = *it;
+
+				int s_l = x.size();
+				send(g_clientSocket, (char*)&s_l, sizeof(s_l), 0);
+				send(g_clientSocket, x.c_str(), s_l, 0);
+
+				char* buf_115 = new char[50];
+				snprintf(buf_115, strlen(buf_115), "the x is %s\n", x.c_str());
+				OutputDebugStringA(buf_115);
+				delete[]buf_115;
+
+				it++;
+			}
+
+			int cc_l = 0;
+			recv(g_clientSocket, (char*)&cc_l, sizeof(cc_l), 0);
+			std::string cc(cc_l, '\0');
+			recv(g_clientSocket, &cc[0], cc_l, 0);
+
+			if (strcmp("success", cc.c_str()) == 0)
+			{
+				MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­¸üĞÂÄúµÄºÃÓÑÁĞ±íºÍĞÂÅóÓÑÁĞ±í£¬¼´½«»Øµ½ºÃÓÑ¿ò", L"QQ", MB_ICONINFORMATION);
+				EndDialog(hwndDlg, IDOK);
+				return(INT_PTR)TRUE;
+			}
+			return (INT_PTR)TRUE;
+
+		}
+
+		case IDCANCEL:
+		{
+			//Ïò·şÎñÆ÷·¢ËÍÈ·¶¨ÏûÏ¢
+			std::string buf = "È¡Ïû";
+			int buf_len = buf.size();
+			send(g_clientSocket, (char*)&buf_len, sizeof(buf_len), 0);
+			send(g_clientSocket, buf.c_str(), buf_len, 0);
+
+			EndDialog(hwndDlg, IDCANCEL);
+			return(INT_PTR)TRUE;
+
+		}
+		}
+	}break;
+
+
+    }
+
+	return (INT_PTR)FALSE;
+}
+
+
+INT_PTR CALLBACK Dialog_sixteen(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//Ìí¼ÓºÃÓÑÕËºÅÊäÈë¿ò
+{
+	switch (uMsg)
+	{
+
+	case WM_INITDIALOG:
+	{
+		SetDlgItemText(hwndDlg, IDC_EDIT47, L"ÇëÊäÈëºÃÓÑµÄÕËºÅ");
+		//½ûÓÃÈ·¶¨°´Å¥
+		HWND hSendBtn = GetDlgItem(hwndDlg, IDOK);
+		EnableWindow(hSendBtn, false);
+		return (INT_PTR)TRUE;
+
+	}break;
+
+	case WM_COMMAND:
+	{
+		if (HIWORD(wParam) == EN_CHANGE && LOWORD(wParam) == IDC_EDIT48)
+		{
+			HWND hEdit = GetDlgItem(hwndDlg, IDC_EDIT48);
+			HWND hSendBtn = GetDlgItem(hwndDlg, IDOK);
+			int len = GetWindowTextLength(hEdit);
+			EnableWindow(hSendBtn, len > 0);
+		}
+
+		switch (LOWORD(wParam))
+		{
+
+		case IDOK:
+		{
+			//»ñÈ¡¿Ø¼şIDC_EDIT48µÄÎÄ±¾
+			HWND h = GetDlgItem(hwndDlg, IDC_EDIT48);
+			//»ñÈ¡ÎÄ±¾³¤¶È
+			int w_text_len = GetWindowTextLength(h);
+			if (w_text_len < 0)
+			{
+				return (INT_PTR)TRUE;
+			}
+
+			//Ïò·şÎñÆ÷·¢ËÍÈ·¶¨ÏûÏ¢
+			std::string buf = "È·¶¨";
+			int buf_len = buf.size();
+			send(g_clientSocket, (char*)&buf_len, sizeof(buf_len), 0);
+			send(g_clientSocket, buf.c_str(), buf_len, 0);
+
+		
+			std::wstring w_text(w_text_len+1,L'\0');
+			GetWindowText(h, &w_text[0], w_text_len+1);
+
+			if (!w_text.empty() && w_text.back() == L'\0')
+			{
+				w_text.pop_back();
+			}
+
+			//½«¿í×Ö·û´®×ª»»
+			int utf8_len = 0;
+			utf8_len=WideCharToMultiByte(CP_UTF8,0,w_text.c_str(),w_text_len,NULL,0,NULL,NULL);
+			std::string utf8_str(utf8_len,'\0');
+			WideCharToMultiByte(CP_UTF8, 0, w_text.c_str(), w_text_len, &utf8_str[0],utf8_len, NULL, NULL);
+
+			//Ïò·şÎñÆ÷·¢ËÍºÃÓÑÕËºÅ½øĞĞÑéÖ¤
+			send(g_clientSocket, (char*)&utf8_len, sizeof(utf8_len), 0);
+			send(g_clientSocket, utf8_str.c_str(), utf8_len, 0);
+
+			//Çå¿ÕÕËºÅÊäÈë¿ò
+			SetDlgItemText(hwndDlg,IDC_EDIT48,L"");
+
+			//½ÓÊÕ·şÎñÆ÷¸ÃºÃÓÑÕËºÅÊÇ·ñ´æÔÚµÄÏûÏ¢
+			
+			int x_len = 0;
+
+			recv(g_clientSocket,(char*)&x_len, sizeof(x_len), 0);
+			std::string x_str(x_len, '\0');
+			recv(g_clientSocket, &x_str[0], x_len, 0);
+
+			if(strcmp("Ìí¼ÓµÄºÃÓÑÕËºÅ´æÔÚ",x_str.c_str()) == 0)
+			//Èô´æÔÚ
+			{
+				MessageBox(NULL, L"Ìí¼ÓµÄºÃÓÑÕËºÅ´æÔÚ,ÒÑ³É¹¦·¢ËÍÌí¼ÓºÃÓÑµÄÇëÇó", L"QQ", MB_ICONINFORMATION);
+				//¹Ø±Õ¶Ô»°¿ò£¬·µ»ØºÃÓÑ¿ò
+				EndDialog(hwndDlg,IDOK);
+				return (INT_PTR)TRUE;
+			}
+
+			else if (strcmp("ÄãÃÇÒÑ¾­ÊÇºÃÓÑ£¬ÎŞĞèÔÚ·¢ËÍºÃÓÑÇëÇó", x_str.c_str()) == 0)
+				//Èô´æÔÚ
+			{
+				MessageBox(NULL, L"ÄãÃÇÒÑ¾­ÊÇºÃÓÑ£¬ÎŞĞèÔÚ·¢ËÍºÃÓÑÇëÇó", L"QQ", MB_ICONINFORMATION);
+				//¹Ø±Õ¶Ô»°¿ò£¬·µ»ØºÃÓÑ¿ò
+				EndDialog(hwndDlg, IDOK);
+				return (INT_PTR)TRUE;
+			}
+
+			else if (strcmp("ÒÑ¾­·¢ËÍ¹ıºÃÓÑÇëÇó£¬ÇëÄÍĞÄµÈ´ı", x_str.c_str()) == 0)
+				//Èô´æÔÚ
+			{
+				MessageBox(NULL, L"ÒÑ¾­·¢ËÍ¹ıºÃÓÑÇëÇó£¬ÇëÄÍĞÄµÈ´ı", L"QQ", MB_ICONINFORMATION);
+				//¹Ø±Õ¶Ô»°¿ò£¬·µ»ØºÃÓÑ¿ò
+				EndDialog(hwndDlg, IDOK);
+				return (INT_PTR)TRUE;
+			}
+
+			else if (strcmp("Ìí¼ÓµÄºÃÓÑÕËºÅ²»´æÔÚ", x_str.c_str()) == 0)
+			//Èô²»´æÔÚ
+			{
+				MessageBox(NULL, L"Ìí¼ÓµÄºÃÓÑÕËºÅ²»´æÔÚ", L"QQ", MB_ICONERROR);
+				MessageBox(NULL, L"ÇëÖØĞÂÊäÈëºÃÓÑµÄÕËºÅ", L"QQ", MB_ICONINFORMATION);
+				return (INT_PTR)TRUE;
+			}
+
+		}break;
+
+		case IDCANCEL:
+		{
+			//Ïò·şÎñÆ÷·¢ËÍÈ·¶¨ÏûÏ¢
+			std::string buf = "È¡Ïû";
+			int buf_len = buf.size();
+			send(g_clientSocket, (char*)&buf_len, sizeof(buf_len), 0);
+			send(g_clientSocket, buf.c_str(), buf_len, 0);
+
+		   //ÍË³öÌí¼ÓºÃÓÑÕËºÅÊäÈë¿ò
+			EndDialog(hwndDlg,IDCANCEL);
+			return (INT_PTR)TRUE;
+
+		}break;
+
+		}
+	}break;
+
+	}
+
+	return (INT_PTR)FALSE;
+}
+
+//×ª»»×Ö·û´®Îª¿í×Ö·û´®
+std::wstring strTowstr(std::string str)
+{
+	int w_len = MultiByteToWideChar(CP_UTF8,0,str.c_str(),str.size(),NULL,0);
+	std::wstring wstr(w_len, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, str.c_str(), str.size(), &wstr[0], w_len);
+	return wstr;
+}
+
+
+INT_PTR CALLBACK  Dialog_eighteen(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//ºÃÓÑĞÅÏ¢¿ò//
+{
+
+	switch (uMsg)
+	{
+
+	case WM_INITDIALOG:
+	{
+
+		SetDlgItemText(hwndDlg, IDC_EDIT50,L"ÕËºÅ");
+		SetDlgItemText(hwndDlg, IDC_EDIT51, L"êÇ³Æ");
+		SetDlgItemText(hwndDlg, IDC_EDIT52, L"ĞÔ±ğ");
+		SetDlgItemText(hwndDlg, IDC_EDIT53, L"ÄêÁä");
+		SetDlgItemText(hwndDlg, IDC_EDIT54, L"¸öĞÔÇ©Ãû");
+
+		SetDlgItemText(hwndDlg, IDC_EDIT55,strTowstr(xxy.account).c_str());
+		SetDlgItemText(hwndDlg, IDC_EDIT56, strTowstr(xxy.nickname).c_str());
+		SetDlgItemText(hwndDlg, IDC_EDIT57, strTowstr(xxy.gender).c_str());
+		SetDlgItemText(hwndDlg, IDC_EDIT58, strTowstr(xxy.age).c_str());
+		SetDlgItemText(hwndDlg, IDC_EDIT59, strTowstr(xxy.signature).c_str());
+
+		return (INT_PTR)TRUE;
+
+	}break;
+
+	case WM_COMMAND:
+	{
+		switch (LOWORD(wParam))
+		{
+
+		case IDCANCEL:
+		{
+		   //Ïò·şÎñÆ÷·¢ËÍÈ¡Ïû°´Å¥
+			std::string sd = "È¡Ïû";
+			int sd_len = sd.size();
+			send(g_clientSocket,(char*)&sd_len,sizeof(sd_len),0);
+			send(g_clientSocket,sd.c_str(),sd_len,0);
+
+			//¹Ø±ÕºÃÓÑÏûÏ¢Õ¹Ê¾¿ò
+			EndDialog(hwndDlg,IDCANCEL);
+			return (INT_PTR)TRUE;
+
+		}break;
+
+		}
+
+	}break;
+
+	}
+
+	return (INT_PTR)FALSE;
+}
+
+struct users_chart_information
+{
+	std::string inf_send_account;
+	std::string inf_recv_account;
+	std::string inf;
+};
+std::vector<users_chart_information>g_users_chart_information;
+users_chart_information ss;
+
+
+INT_PTR CALLBACK Dialog_nineteen(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//ºÃÓÑÁÄÌì¶Ô»°¿ò//
+{
+	
+	switch (uMsg)
+	{
+	
+	case WM_INITDIALOG:
+	{
+		//½ûÓÃ·¢ËÍ°´Å¥
+		HWND hBton1 = GetDlgItem(hwndDlg,IDOK);
+		EnableWindow(hBton1,FALSE);
+		//Çå¿ÕÎÄ±¾¿ò
+		SetDlgItemText(hwndDlg,IDC_EDIT61,L"");
+
+		//ĞèÒª¼ÓÔØÏÈÇ°µÄÁÄÌì¼ÇÂ¼
+		
+		//Ïò·şÎñÆ÷·¢ËÍ¼ÓÔØÏÈÇ°ÁÄÌì¼ÇÂ¼µÄÇëÇó
+		std::string r_str = "ÇëÇó¸üĞÂÁÄÌì¿òÏûÏ¢";
+		int r_str_len = r_str.size();
+		send(g_clientSocket, (char*)&r_str_len, sizeof(r_str_len), 0);
+		send(g_clientSocket, r_str.c_str(), r_str_len, 0);
+
+		char* buf = new char[50];
+		snprintf(buf, 50, "the r_str is %s\n", r_str.c_str());
+		OutputDebugStringA(buf);
+		delete[]buf;
+
+		//½ÓÊÕ×ÜµÄÁÄÌì¿òÏûÏ¢ÌõÊı
+		int msg_len = 0;
+		recv(g_clientSocket, (char*)&msg_len, sizeof(msg_len), 0);
+
+		char* buf2 = new char[50];
+		snprintf(buf2, 50, "the msg_len is %d\n", msg_len);
+		OutputDebugStringA(buf2);
+		delete[]buf2;
+
+		//Èç¹ûÌõÊıÎª0
+		if (msg_len <= 0)
+		{
+			//³õÊ¼»¯½áÊø
+			return (INT_PTR)TRUE;
+		}
+		else
+		{
+			int i = 0;
+			g_users_chart_information.clear();
+
+			//½ÓÊÕ·¢ËÍµÄÏûÏ¢
+			while (i < msg_len)
+			{
+				ss = users_chart_information();//Çå¿Õ½á¹¹Ìå
+
+				//½ÓÊÕÏûÏ¢·¢ËÍ·½ÕËºÅ
+				int account_send_len = 0;
+				recv(g_clientSocket, (char*)&account_send_len, sizeof(account_send_len), 0);
+
+				char* buf13 = new char[50];
+				snprintf(buf13, 50, "the  account_send_len is %d\n", account_send_len);
+				OutputDebugStringA(buf13);
+				delete[]buf13;
+
+				ss.inf_send_account.resize(account_send_len);
+				recv(g_clientSocket,&ss.inf_send_account[0],account_send_len,0);
+
+				char* buf6 = new char[50];
+				snprintf(buf6, 50, "the  ss.inf_send_account is %s\n", ss.inf_send_account.c_str());
+				OutputDebugStringA(buf6);
+				delete[]buf6;
+
+				//½ÓÊÕÏûÏ¢½ÓÊÕ·½ÕËºÅ
+				int account_recv_len = 0;
+				recv(g_clientSocket, (char*)&account_recv_len, sizeof(account_recv_len), 0);
+
+				char* buf14 = new char[50];
+				snprintf(buf14, 50, "the  account_recv_len is %d\n", account_recv_len);
+				OutputDebugStringA(buf14);
+				delete[]buf14;
+
+				ss.inf_recv_account.resize(account_recv_len);
+				recv(g_clientSocket, &ss.inf_recv_account[0], account_recv_len, 0);
+
+				char* buf7 = new char[50];
+				snprintf(buf7, 50, "the  ss.inf_recv_account is %s\n", ss.inf_recv_account.c_str());
+				OutputDebugStringA(buf7);
+				delete[]buf7;
+
+
+				//ÏûÏ¢
+				int inf_len = 0;
+				recv(g_clientSocket, (char*)&inf_len, sizeof(inf_len), 0);
+				
+				char* buf45 = new char[50];
+				snprintf(buf45, 50, "the  inf_len is %d\n", inf_len);
+				OutputDebugStringA(buf45);
+				delete[]buf45;
+
+				ss.inf.resize(inf_len);
+				recv(g_clientSocket, &ss.inf[0], inf_len, 0);
+
+				char* buf8 = new char[50];
+				snprintf(buf8, 50, "the  ss.inf is %s\n", ss.inf.c_str());
+				OutputDebugStringA(buf8);
+				delete[]buf8;
+
+				//Ñ¹Èë¶ÓÁĞ
+				g_users_chart_information.push_back(ss);
+
+				i++;
+			}
+
+
+			//ÒÔÒ»¶¨µÄ¸ñÊ½ÏÔÊ¾ÁÄÌì¼ÇÂ¼
+			
+			
+			//Çå¿ÕÁÄÌì¿ò
+			HWND n = GetDlgItem(hwndDlg,IDC_EDIT60);
+			SendMessage(n, LB_RESETCONTENT, 0, 0);
+			for (int k = 0; k < msg_len;k++)
+			{
+				SendDlgItemMessage(hwndDlg, IDC_EDIT60, LB_ADDSTRING, 0, (LPARAM)L"");
+			}
+			
+		}
+
+	}break;
+
+	
+	case WM_MEASUREITEM:
+	{
+		// ÈÃÃ¿Ïî¸ß¶È×ÔÊÊÓ¦ÄÚÈİ
+		LPMEASUREITEMSTRUCT lpmis = (LPMEASUREITEMSTRUCT)lParam;
+		if (lpmis->CtlID == IDC_EDIT60)
+		{
+			int idx = lpmis->itemID;
+
+			if (idx >= 0 && idx < (int)g_users_chart_information.size())
+			{
+				HWND hList9 = GetDlgItem(hwndDlg, IDC_EDIT60);
+				RECT rcListBox;
+				GetClientRect(hList9, &rcListBox);
+				int listBoxWidth = rcListBox.right - rcListBox.left;
+				int avatarSize = 40;
+				int leftPadding = 10;
+				int rightPadding = 8;
+				int contentWidth = listBoxWidth - (avatarSize + leftPadding + rightPadding);
+
+				// ¼ÆËãÏûÏ¢ÄÚÈİµÄ¸ß¶È
+				const users_chart_information& item = g_users_chart_information[idx];
+				std::wstring wmsg;
+				int wlen = MultiByteToWideChar(CP_UTF8, 0, item.inf.c_str(), (int)item.inf.size(), NULL, 0);
+				wmsg.resize(wlen);
+				MultiByteToWideChar(CP_UTF8, 0, item.inf.c_str(), (int)item.inf.size(), &wmsg[0], wlen);
+
+				HDC hdc = GetDC(hwndDlg);
+				RECT rcMsg = { 0, 0,contentWidth, 0 }; // Áô³öÍ·ÏñºÍ±ß¾à
+				DrawTextW(hdc, wmsg.c_str(), (int)wmsg.size(), &rcMsg, DT_WORDBREAK | DT_CALCRECT);
+				ReleaseDC(hwndDlg, hdc);
+
+				int nicknameHeight = 18;
+				int padding = 8;
+				int minHeight = avatarSize + 8;
+				int contentHeight = rcMsg.bottom - rcMsg.top + nicknameHeight + padding;
+				lpmis->itemHeight = max(minHeight, contentHeight); // ÖÁÉÙÍ·Ïñ¸ß¶È
+			}
+			else
+			{
+				lpmis->itemHeight = 48;
+			}
+
+			return (INT_PTR)TRUE;
+		}
+		return (INT_PTR)TRUE;
+		
+	}break;
+
+	
+	case WM_DRAWITEM:
+	{
+		LPDRAWITEMSTRUCT lpdis = (LPDRAWITEMSTRUCT)lParam;
+		if (lpdis->CtlID == IDC_EDIT60)
+		{
+			int idx = lpdis->itemID;
+			
+			if (idx >= 0 && idx < (int)g_users_chart_information.size())
+			{
+				HWND hList10 = GetDlgItem(hwndDlg, IDC_EDIT60);
+				RECT rcListBox;
+				GetClientRect(hList10, &rcListBox);
+				int listBoxWidth = rcListBox.right - rcListBox.left;
+				int avatarSize = 40;
+				int leftPadding = 10;
+				int rightPadding = 8;
+				int contentWidth = listBoxWidth - (avatarSize + leftPadding + rightPadding);
+
+				const users_chart_information& item = g_users_chart_information[idx];
+
+				// ±³¾°
+				SetBkColor(lpdis->hDC, (lpdis->itemState & ODS_SELECTED) ? RGB(220, 240, 255) : RGB(255, 255, 255));
+				ExtTextOut(lpdis->hDC, 0, 0, ETO_OPAQUE, &lpdis->rcItem, NULL, 0, NULL);
+
+				
+				std::string host_account = new_online_user_account;
+				if (!host_account.empty() && host_account.back() == '\0')
+				{
+					host_account.pop_back();
+				}
+
+				char* buf9 = new char[50];
+				snprintf(buf9, 50, "the  item.inf_send_account is %s\n", item.inf_send_account.c_str());
+				OutputDebugStringA(buf9);
+				delete[]buf9;
+
+				char* buf10 = new char[50];
+				snprintf(buf10, 50, "the  host_account is %s\n", host_account.c_str());
+				OutputDebugStringA(buf10);
+				delete[]buf10;
+
+				char* buf11 = new char[50];
+				snprintf(buf11, 50, "the  account_recver is %s\n", account_recver.c_str());
+				OutputDebugStringA(buf11);
+				delete[]buf11;
+
+				if (strcmp(account_recver.c_str(),item.inf_send_account.c_str()) == 0)//¸ÃÏûÏ¢ÊÇºÃÓÑ·¢ËÍµÄ
+				{
+					char* buf13 = new char[50];
+					snprintf(buf13, 50, "the image_recver is %d\n", image_recver.size());
+					OutputDebugStringA(buf13);
+					delete[]buf13;
+
+					// Í·Ïñ
+					if (!image_recver.empty())
+					{
+						char* buf12 = new char[50];
+						snprintf(buf12, 50, "the  image_recver.size() is %d\n", (unsigned long long)image_recver.size());
+						OutputDebugStringA(buf12);
+						delete[]buf12;
+
+						HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE,image_recver.size());
+						void* pMem = GlobalLock(hMem);
+						memcpy(pMem,image_recver.data(),image_recver.size());
+						GlobalUnlock(hMem);
+						IStream* pStream = NULL;
+						if (CreateStreamOnHGlobal(hMem, TRUE, &pStream) == S_OK)
+						{
+							Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromStream(pStream);
+							if (bmp && bmp->GetLastStatus() == Gdiplus::Ok)
+							{
+								Gdiplus::Graphics g(lpdis->hDC);
+								Gdiplus::Rect dest(lpdis->rcItem.left + 4, lpdis->rcItem.top + 4, avatarSize, avatarSize);
+								g.DrawImage(bmp, dest);
+								delete bmp;
+							}
+							pStream->Release();
+						}
+						GlobalFree(hMem);
+					}
+
+					// êÇ³Æ
+					std::wstring wnickname;
+					int wlen = MultiByteToWideChar(CP_UTF8, 0,nickname_recver.c_str(),nickname_recver.size(), NULL, 0);
+					wnickname.resize(wlen);
+					MultiByteToWideChar(CP_UTF8, 0,nickname_recver.c_str(),nickname_recver.size(), &wnickname[0], wlen);
+
+					RECT rcNick = lpdis->rcItem;
+					rcNick.left += avatarSize + 10;
+					rcNick.top += 4;
+					rcNick.bottom = rcNick.top + 18;
+					SetTextColor(lpdis->hDC, RGB(0, 102, 204));
+					DrawText(lpdis->hDC, wnickname.c_str(), (int)wnickname.size(), &rcNick, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+				}
+
+				else if (strcmp(host_account.c_str(), item.inf_send_account.c_str()) == 0)
+				{
+					char* buf13 = new char[50];
+					snprintf(buf13, 50, "the user_image_data is %d\n",user_image_data.size());
+					OutputDebugStringA(buf13);
+					delete[]buf13;
+
+					// Í·Ïñ
+					if (user_image_data.size())
+					{
+						HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE,user_image_data.size());
+						void* pMem = GlobalLock(hMem);
+						memcpy(pMem,user_image_data.data(), user_image_data.size());
+						GlobalUnlock(hMem);
+						IStream* pStream = NULL;
+						if (CreateStreamOnHGlobal(hMem, TRUE, &pStream) == S_OK)
+						{
+							Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromStream(pStream);
+							if (bmp && bmp->GetLastStatus() == Gdiplus::Ok)
+							{
+								Gdiplus::Graphics g(lpdis->hDC);
+								Gdiplus::Rect dest(lpdis->rcItem.left + 4, lpdis->rcItem.top + 4, avatarSize, avatarSize);
+								g.DrawImage(bmp, dest);
+								delete bmp;
+							}
+							pStream->Release();
+						}
+						GlobalFree(hMem);
+					}
+
+					std::wstring wnickname;
+					int wlen_x = MultiByteToWideChar(CP_UTF8, 0,user_nickname_data.c_str(),user_nickname_data.size(), NULL, 0);
+					wnickname.resize(wlen_x);
+					MultiByteToWideChar(CP_UTF8, 0,user_nickname_data.c_str(),user_nickname_data.size(), &wnickname[0],wlen_x);
+
+					// êÇ³Æ
+					RECT rcNick = lpdis->rcItem;
+					rcNick.left += avatarSize + 10;
+					rcNick.top += 4;
+					rcNick.bottom = rcNick.top + 18;
+					SetTextColor(lpdis->hDC, RGB(0, 102, 204));
+					DrawText(lpdis->hDC,wnickname.c_str(),wlen_x, &rcNick, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+
+				}
+
+				// ÏûÏ¢ÄÚÈİ
+				std::wstring wmsg;
+				int wlen = MultiByteToWideChar(CP_UTF8, 0, item.inf.c_str(), (int)item.inf.size(), NULL, 0);
+				wmsg.resize(wlen);
+				MultiByteToWideChar(CP_UTF8, 0, item.inf.c_str(), (int)item.inf.size(), &wmsg[0], wlen);
+
+				RECT rcMsg = lpdis->rcItem;
+				rcMsg.left += avatarSize + 10;
+				rcMsg.top += 24;
+				rcMsg.right = rcMsg.left + contentWidth;
+				SetTextColor(lpdis->hDC, RGB(0, 0, 0));
+				DrawText(lpdis->hDC, wmsg.c_str(), (int)wmsg.size(), &rcMsg, DT_LEFT | DT_WORDBREAK);
+
+				// Ñ¡ÖĞ±ß¿ò
+				if (lpdis->itemState & ODS_SELECTED)
+					DrawFocusRect(lpdis->hDC, &lpdis->rcItem);
+
+			}
+			return (INT_PTR)TRUE;
+		}
+	}break;
+
+	
+	case WM_COMMAND:
+	{
+		//¼ì²âÎÄ±¾¿òÊÇ·ñÓĞÄÚÈİ£¬ÈôÓĞÆôÓÃ·¢ËÍ°´Å¥£¬ÈôÃ»ÓĞ½ûÓÃ·¢ËÍ°´Å¥
+
+		 HWND hList11 = GetDlgItem(hwndDlg,IDC_EDIT61);
+		 HWND hBton_ok= GetDlgItem(hwndDlg, IDOK);
+
+		if (HIWORD(wParam) == EN_CHANGE && LOWORD(wParam) == IDC_EDIT61)
+		{
+			int len =GetWindowTextLength(hList11);
+			EnableWindow(hBton_ok,len>0);
+		}
+
+		switch (LOWORD(wParam))
+		{
+
+		case IDC_UPDATEINFORMATION://¸üĞÂÏûÏ¢
+		{
+
+			//Ïò·şÎñÆ÷·¢ËÍ¸üĞÂÏûÏ¢µÄÇëÇó
+			std::string r_str = "¸üĞÂÏûÏ¢";
+			int r_str_len = r_str.size();
+			send(g_clientSocket, (char*)&r_str_len, sizeof(r_str_len), 0);
+			send(g_clientSocket, r_str.c_str(), r_str_len, 0);
+
+
+			//Ïò·şÎñÆ÷·¢ËÍ¼ÓÔØÏÈÇ°ÁÄÌì¼ÇÂ¼µÄÇëÇó
+			std::string r_str_x = "ÇëÇó¸üĞÂÁÄÌì¿òÏûÏ¢";
+			int r_str_len_x = r_str_x.size();
+			send(g_clientSocket, (char*)&r_str_len_x, sizeof(r_str_len_x), 0);
+			send(g_clientSocket, r_str_x.c_str(), r_str_len_x, 0);
+
+			//½ÓÊÕ×ÜµÄÁÄÌì¿òÏûÏ¢ÌõÊı
+			int msg_len = 0;
+			recv(g_clientSocket, (char*)&msg_len, sizeof(msg_len), 0);
+
+			//Èç¹ûÌõÊıÎª0
+			if (msg_len <= 0)
+			{
+				//³õÊ¼»¯½áÊø
+				return (INT_PTR)TRUE;
+			}
+			else
+			{
+				int i = 0;
+				g_users_chart_information.clear();
+
+				//½ÓÊÕ·¢ËÍµÄÏûÏ¢
+				while (i < msg_len)
+				{
+					ss = users_chart_information();//Çå¿Õ½á¹¹Ìå
+				
+					//½ÓÊÕÏûÏ¢·¢ËÍ·½ÕËºÅ
+					int account_send_len = 0;
+					recv(g_clientSocket, (char*)&account_send_len, sizeof(account_send_len), 0);
+					ss.inf_send_account.resize(account_send_len);
+					recv(g_clientSocket, &ss.inf_send_account[0], account_send_len, 0);
+
+					char* buf3 = new char[50];
+					snprintf(buf3, 50, "the  ss.inf_send_account is %s\n", ss.inf_send_account.c_str());
+					OutputDebugStringA(buf3);
+					delete[]buf3;
+
+					//½ÓÊÕÏûÏ¢½ÓÊÕ·½ÕËºÅ
+					int account_recv_len = 0;
+					recv(g_clientSocket, (char*)&account_recv_len, sizeof(account_recv_len), 0);
+					ss.inf_recv_account.resize(account_recv_len);
+					recv(g_clientSocket, &ss.inf_recv_account[0], account_recv_len, 0);
+
+					char* buf4 = new char[50];
+					snprintf(buf4, 50, "the  ss.inf_recv_account is %s\n", ss.inf_recv_account.c_str());
+					OutputDebugStringA(buf4);
+					delete[]buf4;
+
+					//ÏûÏ¢
+					int inf_len = 0;
+					recv(g_clientSocket, (char*)&inf_len, sizeof(inf_len), 0);
+					ss.inf.resize(inf_len);
+					recv(g_clientSocket, &ss.inf[0], inf_len, 0);
+
+					char* buf5 = new char[50];
+					snprintf(buf5, 50, "the  ss.inf is %s\n", ss.inf.c_str());
+					OutputDebugStringA(buf5);
+					delete[]buf5;
+
+					//Ñ¹Èë¶ÓÁĞ
+					g_users_chart_information.push_back(ss);
+
+					i++;
+				}
+
+				//ÒÔÒ»¶¨µÄ¸ñÊ½ÏÔÊ¾ÁÄÌì¼ÇÂ¼
+
+				//Çå¿ÕÁÄÌì¿ò
+				HWND n_x = GetDlgItem(hwndDlg, IDC_EDIT60);
+				SendMessage(n_x, LB_RESETCONTENT, 0, 0);
+
+				for (int k = 0; k < msg_len; k++)
+				{
+					SendDlgItemMessage(hwndDlg, IDC_EDIT60, LB_ADDSTRING, 0, (LPARAM)L"");
+				}
+
+			}
+
+
+		}break;
+
+		case IDOK://·¢ËÍÏûÏ¢
+		{
+			//Ïò·şÎñÆ÷·¢ËÍ¸üĞÂÏûÏ¢µÄÇëÇó
+			std::string r_str = "·¢ËÍÏûÏ¢";
+			int r_str_len = r_str.size();
+			send(g_clientSocket, (char*)&r_str_len, sizeof(r_str_len), 0);
+			send(g_clientSocket, r_str.c_str(), r_str_len, 0);
+
+			int text_len = GetWindowTextLength(hList11);
+			std::wstring text_str(text_len+1, L'\0');
+			GetWindowText(hList11,&text_str[0],text_len+1);
+            
+			if (!text_str.empty() && text_str.back() == L'\0')
+			{
+				text_str.pop_back();
+			}
+
+			//½«¿í×Ö·û´®×ª»»Îª×Ö·û´®
+			int utf8_len = WideCharToMultiByte(CP_UTF8,0,text_str.c_str(),text_str.size(),NULL,0,NULL,NULL);
+			std::string utf8_str(utf8_len,'\0');
+			WideCharToMultiByte(CP_UTF8, 0, text_str.c_str(), text_str.size(),&utf8_str[0],utf8_len,NULL,NULL);
+		
+			send(g_clientSocket, (char*)&utf8_len, sizeof(utf8_len), 0);
+			send(g_clientSocket,utf8_str.c_str(),utf8_len,0);
+
+			//Çå¿ÕÎÄ±¾¿ò
+			SetDlgItemText(hwndDlg,IDC_EDIT61,L"");
+
+			//¸üĞÂÏûÏ¢
+
+			
+			//Ïò·şÎñÆ÷·¢ËÍ¼ÓÔØÏÈÇ°ÁÄÌì¼ÇÂ¼µÄÇëÇó
+			std::string r_str_x_12 = "ÇëÇó¸üĞÂÁÄÌì¿òÏûÏ¢";
+			int r_str_len_x_12 = r_str_x_12.size();
+			send(g_clientSocket, (char*)&r_str_len_x_12, sizeof(r_str_len_x_12), 0);
+			send(g_clientSocket, r_str_x_12.c_str(), r_str_len_x_12, 0);
+
+			//½ÓÊÕ×ÜµÄÁÄÌì¿òÏûÏ¢ÌõÊı
+			int msg_len = 0;
+			recv(g_clientSocket, (char*)&msg_len, sizeof(msg_len), 0);
+
+			//Èç¹ûÌõÊıÎª0
+			if (msg_len <= 0)
+			{
+				//³õÊ¼»¯½áÊø
+				return (INT_PTR)TRUE;
+			}
+			else
+			{
+				int i = 0;
+				g_users_chart_information.clear();
+
+				//½ÓÊÕ·¢ËÍµÄÏûÏ¢
+				while (i < msg_len)
+				{
+					ss = users_chart_information();//Çå¿Õ½á¹¹Ìå
+
+					//½ÓÊÕÏûÏ¢·¢ËÍ·½ÕËºÅ
+					int account_send_len = 0;
+					recv(g_clientSocket, (char*)&account_send_len, sizeof(account_send_len), 0);
+					ss.inf_send_account.resize(account_send_len);
+					recv(g_clientSocket, &ss.inf_send_account[0], account_send_len, 0);
+
+					char* buf3 = new char[50];
+					snprintf(buf3, 50, "the  ss.inf_send_account is %s\n", ss.inf_send_account.c_str());
+					OutputDebugStringA(buf3);
+					delete[]buf3;
+
+					//½ÓÊÕÏûÏ¢½ÓÊÕ·½ÕËºÅ
+					int account_recv_len = 0;
+					recv(g_clientSocket, (char*)&account_recv_len, sizeof(account_recv_len), 0);
+					ss.inf_recv_account.resize(account_recv_len);
+					recv(g_clientSocket, &ss.inf_recv_account[0], account_recv_len, 0);
+
+					char* buf4 = new char[50];
+					snprintf(buf4, 50, "the  ss.inf_recv_account is %s\n", ss.inf_recv_account.c_str());
+					OutputDebugStringA(buf4);
+					delete[]buf4;
+
+					//ÏûÏ¢
+					int inf_len = 0;
+					recv(g_clientSocket, (char*)&inf_len, sizeof(inf_len), 0);
+					ss.inf.resize(inf_len);
+					recv(g_clientSocket, &ss.inf[0], inf_len, 0);
+
+					char* buf5 = new char[50];
+					snprintf(buf5, 50, "the  ss.inf is %s\n", ss.inf.c_str());
+					OutputDebugStringA(buf5);
+					delete[]buf5;
+
+					//Ñ¹Èë¶ÓÁĞ
+					g_users_chart_information.push_back(ss);
+
+					i++;
+				}
+
+				//ÒÔÒ»¶¨µÄ¸ñÊ½ÏÔÊ¾ÁÄÌì¼ÇÂ¼
+
+				//Çå¿ÕÁÄÌì¿ò
+				HWND n_x = GetDlgItem(hwndDlg, IDC_EDIT60);
+				SendMessage(n_x, LB_RESETCONTENT, 0, 0);
+
+				for (int k = 0; k < msg_len; k++)
+				{
+					SendDlgItemMessage(hwndDlg, IDC_EDIT60, LB_ADDSTRING, 0, (LPARAM)L"");
+				}
+
+			}
+
+			return (INT_PTR)TRUE;
+
+		}break;
+
+		case IDCANCEL://ÍË³ö¸Ã¿ò
+		{
+			//Ïò·şÎñÆ÷·¢ËÍ¸üĞÂÏûÏ¢µÄÇëÇó
+			std::string r_str = "ÍË³ö";
+			int r_str_len = r_str.size();
+			send(g_clientSocket, (char*)&r_str_len, sizeof(r_str_len), 0);
+			send(g_clientSocket, r_str.c_str(), r_str_len, 0);
+
+			//½«ÁÄÌì¶Ô»°¿ò¹Ø±Õ
+			EndDialog(hwndDlg, IDCANCEL);
+			return (INT_PTR)TRUE;
+
+		}break;
+
+		}
+
+
+	}break;
+
+	}
+
+    return (INT_PTR)FALSE;
+}
+
+
 
 INT_PTR CALLBACK  Dialog_thirdteen(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//ºÃÓÑÁĞ±í¿ò//
 {
 	switch (uMsg)
 	{
+	
 	case WM_INITDIALOG:
-		return (INT_PTR)TRUE;
-	case WM_COMMAND:
-		switch (LOWORD(wParam))
+	{
+
+		HWND hBtn1 = GetDlgItem(hwndDlg, IDC_DELETE_FRIEND);
+	    EnableWindow(hBtn1,FALSE);
+		HWND hBtn2 = GetDlgItem(hwndDlg, IDC_FRIEND_INFORMATION);
+		EnableWindow(hBtn2, FALSE);
+		HWND hBtn3 = GetDlgItem(hwndDlg, IDC_CHART);
+		EnableWindow(hBtn3, FALSE);
+		
+		//ÇëÇó¼ÓÔØºÃÓÑÁĞ±í
+		std::string msg = "ÇëÇó¼ÓÔØºÃÓÑÁĞ±í";
+		int msg_len = msg.size();
+		send(g_clientSocket, (char*)&msg_len, sizeof(msg_len), 0);
+		send(g_clientSocket, msg.c_str(), msg_len, 0);
+		//½ÓÊÕ·şÎñÆ÷ÊÇ·ñ³É¹¦½ÓÊÕ¿Í»§¶ËÇëÇó
+		int recv_len = 0;
+		recv(g_clientSocket, (char*)&recv_len, sizeof(recv_len), 0);
+		std::string recv_str(recv_len, '\0');
+		recv(g_clientSocket, &recv_str[0], recv_len, 0);
+		//±È½Ï½ÓÊÕÄÚÈİ
+		if (strcmp("success", recv_str.c_str()) != 0)
 		{
-		case IDOK:
-			EndDialog(hwndDlg, IDOK);
-			return (INT_PTR)TRUE;
-		case IDCANCEL:
+			MessageBox(NULL, L"·şÎñÆ÷Î´³É¹¦½ÓÊÕ¼ÓÔØ¿Í»§¶ËµÄºÃÓÑÁĞ±íÇëÇó", L"QQ", MB_ICONERROR);
+			//¹Ø±Õ´°¿Ú£¬·µ»ØµÇÂ¼½çÃæÊ×Ò³¿ò
 			EndDialog(hwndDlg, IDCANCEL);
 			return (INT_PTR)TRUE;
 		}
+		else
+		{
+			MessageBox(NULL, L"·şÎñÆ÷ÒÑ³É¹¦½ÓÊÕ¼ÓÔØ¿Í»§¶ËµÄºÃÓÑÁĞ±íÇëÇó", L"QQ", MB_ICONINFORMATION);
+		}
+		//½ÓÊÕºÃÓÑÁĞ±íµÄÌõÊı
+		int total_count = 0;
+		recv(g_clientSocket, (char*)&total_count, sizeof(total_count), 0);
+
+		if (total_count > 0)
+		{
+			MessageBox(NULL, L"¼´½«¼ÓÔØºÃÓÑÁĞ±í", L"QQ", MB_ICONINFORMATION);
+			//½ÓÊÕºÃÓÑÁĞ±íµÄÏûÏ¢¼¯
+			int i = 0;
+			g_user_friends.clear();//È·±£ºÃÓÑÏûÏ¢¶ÓÁĞÇå¿Õ
+			user_friend u;
+			while (i < total_count)
+			{
+				u = user_friend();//Çå¿Õ½á¹¹Ìå
+
+				//½ÓÊÕºÃÓÑÔÚÏß±êÖ¾
+				int signal_x = 0;
+				recv(g_clientSocket,(char*)&signal_x,sizeof(signal_x),0);
+				if (signal_x)
+				{
+					u.signal = 1;
+				}
+				else
+				{
+					u.signal = 0;
+				}
+
+
+				//½ÓÊÕºÃÓÑÕËºÅ
+				int account_x_len = 0;
+				recv(g_clientSocket, (char*)&account_x_len, sizeof(account_x_len), 0);
+				u.account.resize(account_x_len);//ÖØĞÂ·ÖÅä¿Õ¼ä
+				recv(g_clientSocket, &u.account[0], account_x_len, 0);
+
+				char* buf = new char[50]();
+				snprintf(buf,50,"the friend_account is %s\n",u.account.c_str());
+				OutputDebugStringA(buf);
+				delete[]buf;
+
+				//½ÓÊÕºÃÓÑêÇ³Æ
+				int nickname_x_len = 0;
+				recv(g_clientSocket, (char*)&nickname_x_len, sizeof(nickname_x_len), 0);
+				u.nickname.resize(nickname_x_len);//ÖØĞÂ·ÖÅä¿Õ¼ä
+				recv(g_clientSocket, &u.nickname[0], nickname_x_len, 0);
+
+				char* buf_2 = new char[50]();
+				snprintf(buf_2, 50, "the friend_nickname is %s\n", u.nickname.c_str());
+				OutputDebugStringA(buf_2);
+				delete[]buf_2;
+
+				//½ÓÊÕºÃÓÑÍ·Ïñ
+				int image_x_len = 0;
+				recv(g_clientSocket, (char*)&image_x_len, sizeof(image_x_len), 0);
+
+
+				char* buf_3 = new char[50]();
+				snprintf(buf_3, 50, "the friend_photo_len is %d\n",image_x_len);
+				OutputDebugStringA(buf_3);
+				delete[]buf_3;
+
+
+                u.image.resize(image_x_len);//ÖØĞÂ·ÖÅä¿Õ¼ä
+				int  u_r = 0;
+				int u_sum = 0;
+				while (u_sum < image_x_len)
+				{
+					u_r = recv(g_clientSocket, (char*)u.image.data() + u_sum, image_x_len - u_sum, 0);
+					if (u_r > 0)
+					{
+						u_sum += u_r;
+					}
+				}
+				//½ÓÊÕÍê±Ï£¬½«ºÃÓÑµÄĞÅÏ¢Ñ¹Èëµ¯¼Ğ
+				g_user_friends.push_back(u);
+
+				i++;
+			}
+
+			MessageBox(NULL, L"ÒÑ¾­³É¹¦½ÓÊÕÓÃ»§µÄºÃÓÑÏûÏ¢", L"QQ", MB_ICONINFORMATION);
+			//ÒÑÍê³ÉÓÃ»§ºÃÓÑĞÅÏ¢ÁĞ±íµÄ½ÓÊÕ
+			//½«ÓÃ»§ºÃÓÑÁĞ±íÒÔÒ»¶¨µÄ¸ñÊ½ÏÔÊ¾ÔÚ¿Ø¼şIDC_EDIT46ÉÏ
+			HWND hList12 = GetDlgItem(hwndDlg, IDC_EDIT46);
+			SendMessage(hList12, LB_RESETCONTENT, 0, 0);//Çå¿ÕÁĞ±í¿ò
+			for (size_t i = 0; i < g_user_friends.size(); ++i)
+			{
+				SendDlgItemMessage(hwndDlg, IDC_EDIT46, LB_ADDSTRING, 0, (LPARAM)L"");
+				SendDlgItemMessage(hwndDlg, IDC_EDIT46, LB_SETITEMHEIGHT, i, 48); // Ã¿Ïî48ÏñËØ
+			}
+			return (INT_PTR)TRUE;
+		}
+
+		{
+			MessageBox(NULL, L"ºÃÓÑÁĞ±íÎª¿Õ", L"QQ", MB_ICONINFORMATION);
+			//³õÊ¼»¯½áÊø
+			return (INT_PTR)TRUE;
+		}
+
+	}break;
+
+	
+	case WM_DRAWITEM:
+	{
+		LPDRAWITEMSTRUCT lpdis = (LPDRAWITEMSTRUCT)lParam;
+		if (lpdis->CtlID == IDC_EDIT46)
+		{
+			int idx = lpdis->itemID;
+			if (idx >= 0 && idx < (int)g_user_friends.size())
+			{
+				HWND hList13 = GetDlgItem(hwndDlg, IDC_EDIT46);
+				RECT rcListBox;
+				GetClientRect(hList13, &rcListBox);
+				int listBoxWidth = rcListBox.right - rcListBox.left;
+				int avatarSize = 40;
+				int leftPadding = 10;
+				int rightPadding = 8;
+				int contentWidth = listBoxWidth - (avatarSize + leftPadding + rightPadding);
+
+				const user_friend& item = g_user_friends[idx];
+
+				// ±³¾°
+				SetBkColor(lpdis->hDC, (lpdis->itemState & ODS_SELECTED) ? RGB(230,230, 250) : RGB(255, 255, 255));
+				ExtTextOut(lpdis->hDC, 0, 0, ETO_OPAQUE, &lpdis->rcItem, NULL, 0, NULL);
+
+				// Í·Ïñ
+				if (!item.image.empty())
+				{
+					HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, item.image.size());
+					void* pMem = GlobalLock(hMem);
+					memcpy(pMem, item.image.data(), item.image.size());
+					GlobalUnlock(hMem);
+					IStream* pStream = NULL;
+					if (CreateStreamOnHGlobal(hMem, TRUE, &pStream) == S_OK)
+					{
+						Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromStream(pStream);
+						if (bmp && bmp->GetLastStatus() == Gdiplus::Ok)
+						{
+							Gdiplus::Graphics g(lpdis->hDC);
+							Gdiplus::Rect dest(lpdis->rcItem.left + 4, lpdis->rcItem.top + 4, avatarSize, avatarSize);
+							g.DrawImage(bmp, dest);
+							delete bmp;
+						}
+						pStream->Release();
+					}
+					GlobalFree(hMem);
+				}
+
+				// êÇ³Æ
+				std::wstring wnickname;
+				int wlen = MultiByteToWideChar(CP_UTF8, 0, item.nickname.c_str(), (int)item.nickname.size(), NULL, 0);
+				wnickname.resize(wlen);
+				MultiByteToWideChar(CP_UTF8, 0, item.nickname.c_str(), (int)item.nickname.size(), &wnickname[0], wlen);
+
+				RECT rcNick = lpdis->rcItem;
+				rcNick.left += avatarSize + 10;
+				rcNick.top += 4;
+				rcNick.bottom = rcNick.top + 18;
+				SetTextColor(lpdis->hDC, RGB(0, 102, 204));
+				DrawText(lpdis->hDC, wnickname.c_str(), (int)wnickname.size(), &rcNick, DT_LEFT | DT_SINGLELINE | DT_VCENTER |DT_CALCRECT);
+				DrawText(lpdis->hDC, wnickname.c_str(), (int)wnickname.size(), &rcNick, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+				int t_wideth = rcNick.right - rcNick.left;
+
+				std::wstring wsignal = L"ÀëÏß";
+				// ÔÚÏß±êÖ¾
+				if (item.signal)
+				{
+					wsignal = L"ÔÚÏß";
+				}
+				else
+				{
+					wsignal = L"ÀëÏß";
+				}
+
+				RECT rcSignal = lpdis->rcItem;
+				rcSignal.left += avatarSize + 10 + t_wideth + 30;
+				rcSignal.top += 4;
+				rcSignal.bottom = rcNick.top + 18;
+				SetTextColor(lpdis->hDC, RGB(232, 46, 115));
+				DrawText(lpdis->hDC, wsignal.c_str(), (int)wsignal.size(), &rcSignal, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+
+
+				// ÕËºÅÄÚÈİ
+				std::wstring waccount;
+				wlen = MultiByteToWideChar(CP_UTF8, 0, item.account.c_str(), (int)item.account.size(), NULL, 0);
+				waccount.resize(wlen);
+				MultiByteToWideChar(CP_UTF8, 0, item.account.c_str(), (int)item.account.size(), &waccount[0], wlen);
+
+				RECT rcAcc = lpdis->rcItem;
+				rcAcc.left += avatarSize + 10;
+				rcAcc.top += 24;
+				rcAcc.bottom = rcAcc.top + 18;
+				SetTextColor(lpdis->hDC, RGB(0, 0, 0));
+				DrawText(lpdis->hDC, waccount.c_str(), (int)waccount.size(), &rcAcc, DT_LEFT | DT_SINGLELINE);
+
+
+				// Ñ¡ÖĞ±ß¿ò
+				if (lpdis->itemState & ODS_FOCUS)
+					DrawFocusRect(lpdis->hDC, &lpdis->rcItem);
+			}
+
+		return (INT_PTR)TRUE;
+		}
+	}break;
+
+
+	case WM_COMMAND:
+	{
+		
+		if (HIWORD(wParam) == LBN_SELCHANGE && LOWORD(wParam) == IDC_EDIT46)
+		{
+			HWND hList14 = GetDlgItem(hwndDlg, IDC_EDIT46);
+			HWND hBtn1 = GetDlgItem(hwndDlg, IDC_DELETE_FRIEND);
+			HWND hBtn2 = GetDlgItem(hwndDlg, IDC_FRIEND_INFORMATION);
+			HWND hBtn3 = GetDlgItem(hwndDlg, IDC_CHART);
+
+			int selIdx = (int)SendMessage(hList14, LB_GETCURSEL, 0, 0);
+			EnableWindow(hBtn1, selIdx != LB_ERR); // ÓĞÑ¡ÖĞÏîÊ±ÆôÓÃ°´Å¥£¬·ñÔò½ûÓÃ
+			EnableWindow(hBtn2, selIdx != LB_ERR); // ÓĞÑ¡ÖĞÏîÊ±ÆôÓÃ°´Å¥£¬·ñÔò½ûÓÃ
+			EnableWindow(hBtn3, selIdx != LB_ERR); // ÓĞÑ¡ÖĞÏîÊ±ÆôÓÃ°´Å¥£¬·ñÔò½ûÓÃ
+
+			char* buf_k = new char[50];
+			snprintf(buf_k,strlen(buf_k),"the selIdex is %d\n",selIdx);
+			OutputDebugStringA(buf_k);
+			delete[]buf_k;
+		}
+		
+		switch (LOWORD(wParam))
+		{
+
+		case IDC_UPDATE_LIST:
+		{
+			std::string s = "Ë¢ĞÂÁĞ±í";
+			int s_l = s.size();
+			send(g_clientSocket, (char*)&s_l, sizeof(s_l), 0);
+			send(g_clientSocket, s.c_str(), s_l, 0);
+
+			//ÖØĞÂ¼ÓÔØºÃÓÑÁĞ±í
+
+			//ÇëÇó¼ÓÔØºÃÓÑÁĞ±í
+			std::string msg = "ÇëÇó¼ÓÔØºÃÓÑÁĞ±í";
+			int msg_len = msg.size();
+			send(g_clientSocket, (char*)&msg_len, sizeof(msg_len), 0);
+			send(g_clientSocket, msg.c_str(), msg_len, 0);
+			//½ÓÊÕ·şÎñÆ÷ÊÇ·ñ³É¹¦½ÓÊÕ¿Í»§¶ËÇëÇó
+			int recv_len = 0;
+			recv(g_clientSocket, (char*)&recv_len, sizeof(recv_len), 0);
+			std::string recv_str(recv_len, '\0');
+			recv(g_clientSocket, &recv_str[0], recv_len, 0);
+			//±È½Ï½ÓÊÕÄÚÈİ
+			if (strcmp("success", recv_str.c_str()) != 0)
+			{
+				MessageBox(NULL, L"·şÎñÆ÷Î´³É¹¦½ÓÊÕ¼ÓÔØ¿Í»§¶ËµÄºÃÓÑÁĞ±íÇëÇó", L"QQ", MB_ICONERROR);
+				//¹Ø±Õ´°¿Ú£¬·µ»ØµÇÂ¼½çÃæÊ×Ò³¿ò
+				EndDialog(hwndDlg, IDCANCEL);
+				return (INT_PTR)TRUE;
+			}
+			else
+			{
+				MessageBox(NULL, L"·şÎñÆ÷ÒÑ³É¹¦½ÓÊÕ¼ÓÔØ¿Í»§¶ËµÄºÃÓÑÁĞ±íÇëÇó", L"QQ", MB_ICONINFORMATION);
+			}
+			//½ÓÊÕºÃÓÑÁĞ±íµÄÌõÊı
+			int total_count = 0;
+			recv(g_clientSocket, (char*)&total_count, sizeof(total_count), 0);
+
+			if (total_count > 0)
+			{
+				MessageBox(NULL, L"¼´½«¼ÓÔØºÃÓÑÁĞ±í", L"QQ", MB_ICONINFORMATION);
+				//½ÓÊÕºÃÓÑÁĞ±íµÄÏûÏ¢¼¯
+				int i = 0;
+				g_user_friends.clear();//È·±£ºÃÓÑÏûÏ¢¶ÓÁĞÇå¿Õ
+				user_friend u;
+				while (i < total_count)
+				{
+					u = user_friend();//Çå¿Õ½á¹¹Ìå
+
+					//½ÓÊÕºÃÓÑÔÚÏß±êÖ¾
+					int signal_x = 0;
+					recv(g_clientSocket, (char*)&signal_x, sizeof(signal_x), 0);
+					if (signal_x)
+					{
+						u.signal = 1;
+					}
+					else
+					{
+						u.signal = 0;
+					}
+
+
+					//½ÓÊÕºÃÓÑÕËºÅ
+					int account_x_len = 0;
+					recv(g_clientSocket, (char*)&account_x_len, sizeof(account_x_len), 0);
+					u.account.resize(account_x_len);//ÖØĞÂ·ÖÅä¿Õ¼ä
+					recv(g_clientSocket, &u.account[0], account_x_len, 0);
+
+					char* buf = new char[50]();
+					snprintf(buf, 50, "the friend_account is %s\n", u.account.c_str());
+					OutputDebugStringA(buf);
+					delete[]buf;
+
+					//½ÓÊÕºÃÓÑêÇ³Æ
+					int nickname_x_len = 0;
+					recv(g_clientSocket, (char*)&nickname_x_len, sizeof(nickname_x_len), 0);
+					u.nickname.resize(nickname_x_len);//ÖØĞÂ·ÖÅä¿Õ¼ä
+					recv(g_clientSocket, &u.nickname[0], nickname_x_len, 0);
+
+					char* buf_2 = new char[50]();
+					snprintf(buf_2, 50, "the friend_nickname is %s\n", u.nickname.c_str());
+					OutputDebugStringA(buf_2);
+					delete[]buf_2;
+
+					//½ÓÊÕºÃÓÑÍ·Ïñ
+					int image_x_len = 0;
+					recv(g_clientSocket, (char*)&image_x_len, sizeof(image_x_len), 0);
+
+
+					char* buf_3 = new char[50]();
+					snprintf(buf_3, 50, "the friend_photo_len is %d\n", image_x_len);
+					OutputDebugStringA(buf_3);
+					delete[]buf_3;
+
+
+					u.image.resize(image_x_len);//ÖØĞÂ·ÖÅä¿Õ¼ä
+					int  u_r = 0;
+					int u_sum = 0;
+					while (u_sum < image_x_len)
+					{
+						u_r = recv(g_clientSocket, (char*)u.image.data() + u_sum, image_x_len - u_sum, 0);
+						if (u_r > 0)
+						{
+							u_sum += u_r;
+						}
+					}
+					//½ÓÊÕÍê±Ï£¬½«ºÃÓÑµÄĞÅÏ¢Ñ¹Èëµ¯¼Ğ
+					g_user_friends.push_back(u);
+
+					i++;
+				}
+
+				MessageBox(NULL, L"ÒÑ¾­³É¹¦½ÓÊÕÓÃ»§µÄºÃÓÑÏûÏ¢", L"QQ", MB_ICONINFORMATION);
+				//ÒÑÍê³ÉÓÃ»§ºÃÓÑĞÅÏ¢ÁĞ±íµÄ½ÓÊÕ
+				//½«ÓÃ»§ºÃÓÑÁĞ±íÒÔÒ»¶¨µÄ¸ñÊ½ÏÔÊ¾ÔÚ¿Ø¼şIDC_EDIT46ÉÏ
+				HWND hList12 = GetDlgItem(hwndDlg, IDC_EDIT46);
+				SendMessage(hList12, LB_RESETCONTENT, 0, 0);//Çå¿ÕÁĞ±í¿ò
+				for (size_t i = 0; i < g_user_friends.size(); ++i)
+				{
+					SendDlgItemMessage(hwndDlg, IDC_EDIT46, LB_ADDSTRING, 0, (LPARAM)L"");
+					SendDlgItemMessage(hwndDlg, IDC_EDIT46, LB_SETITEMHEIGHT, i, 48); // Ã¿Ïî48ÏñËØ
+				}
+				return (INT_PTR)TRUE;
+			}
+
+			{
+				MessageBox(NULL, L"ºÃÓÑÁĞ±íÎª¿Õ", L"QQ", MB_ICONINFORMATION);
+				//³õÊ¼»¯½áÊø
+				return (INT_PTR)TRUE;
+			}
+
+
+		}break;
+
+		case IDC_CHART://ÁÄÌì
+		{
+			//ÁÄÌì¿òÂß¼­
+			//Ïò·şÎñÆ÷·¢ËÍÍË³öÏûÏ¢
+			std::string s = "ÁÄÌì";
+			int s_l = s.size();
+			send(g_clientSocket, (char*)&s_l, sizeof(s_l), 0);
+			send(g_clientSocket, s.c_str(), s_l, 0);
+
+			//»ñÈ¡ÁÄÌì¶ÔÏóµÄÕËºÅ¡¢êÇ³ÆºÍÍ·Ïñ
+			HWND hList15 = GetDlgItem(hwndDlg, IDC_EDIT46);
+			int selIdx = (int)SendMessage(hList15, LB_GETCURSEL, 0, 0);
+			std::string& account_recver_x = g_user_friends[selIdx].account;
+
+			account_recver.clear();
+			account_recver = account_recver_x;
+
+			nickname_recver.clear();
+			image_recver.clear();
+
+			nickname_recver = g_user_friends[selIdx].nickname;
+			image_recver= g_user_friends[selIdx].image;
+
+			//·¢ËÍÁÄÌì¶ÔÏóµÄÕËºÅ
+			int recver_account_len = 0;
+			recver_account_len = account_recver_x.size();
+			send(g_clientSocket, (char*)&recver_account_len, sizeof(recver_account_len), 0);
+			send(g_clientSocket, account_recver_x.c_str(), recver_account_len, 0);
+
+			//½ÓÊÕÓÃ»§êÇ³Æ
+			int nickname_len = 0;
+			recv(g_clientSocket, (char*)&nickname_len, sizeof(nickname_len), 0);
+			user_nickname_data.resize(nickname_len);
+			recv(g_clientSocket,&user_nickname_data[0],nickname_len,0);
+
+			EndDialog(hwndDlg, IDC_CHART);
+			return (INT_PTR)TRUE;
+		}break;
+
+		case IDC_FRIEND_INFORMATION://ºÃÓÑÏûÏ¢
+		{
+			//Ïò·şÎñÆ÷·¢ËÍÍË³öÏûÏ¢
+			std::string s = "²é¿´ºÃÓÑĞÅÏ¢";
+			int s_l = s.size();
+			send(g_clientSocket, (char*)&s_l, sizeof(s_l), 0);
+			send(g_clientSocket, s.c_str(), s_l, 0);
+
+			HWND hList16 = GetDlgItem(hwndDlg, IDC_EDIT46);
+			int selIdx = (int)SendMessage(hList16, LB_GETCURSEL, 0, 0);
+
+			std::string& account = g_user_friends[selIdx].account;
+
+			//·¢ËÍÑ¡ÖĞÏîµÄÕËºÅ
+			int acc_len = account.size();
+			send(g_clientSocket, (char*)&acc_len, sizeof(acc_len), 0);
+			send(g_clientSocket, account.c_str(), acc_len, 0);
+
+			char* buf_account = new char[50]();
+			snprintf(buf_account, 50, "the fri_account is %s\n",account.c_str());
+			OutputDebugStringA(buf_account);
+			delete[]buf_account;
+
+
+			//½ÓÊÕ¸ÃºÃÓÑµÄ¸öĞÔĞÅÏ¢
+			xxy = my_user_information();//Çå¿Õ½á¹¹Ìå
+			xxy.account = g_user_friends[selIdx].account;
+			xxy.nickname = g_user_friends[selIdx].nickname;
+
+			//½ÓÊÕºÃÓÑĞÔ±ğ
+			int fri_gender_len = 0;
+			recv(g_clientSocket, (char*)&fri_gender_len, sizeof(fri_gender_len), 0);
+			std::string fri_gender(fri_gender_len, '\0');
+			recv(g_clientSocket,&fri_gender[0],fri_gender_len,0);
+			xxy.gender = fri_gender;
+
+			char* buf_gender = new char[50]();
+			snprintf(buf_gender,50,"the fri_gender is %s\n",fri_gender.c_str());
+			OutputDebugStringA(buf_gender);
+			delete[]buf_gender;
+
+			//½ÓÊÕºÃÓÑµÄÄêÁä
+			int fri_age_len = 0;
+			recv(g_clientSocket, (char*)&fri_age_len, sizeof(fri_age_len), 0);
+			std::string fri_age(fri_age_len, '\0');
+			recv(g_clientSocket, &fri_age[0], fri_age_len, 0);
+			xxy.age = fri_age;
+
+			char* buf_age = new char[50]();
+			snprintf(buf_age, 50, "the fri_age is %s\n", fri_age.c_str());
+			OutputDebugStringA(buf_age);
+			delete[]buf_age;
+
+			//½ÓÊÕºÃÓÑµÄ¸öĞÔÇ©Ãû
+			int fri_signature_len = 0;
+			recv(g_clientSocket, (char*)&fri_signature_len, sizeof(fri_signature_len), 0);
+			std::string fri_signature(fri_signature_len, '\0');
+			recv(g_clientSocket, &fri_signature[0], fri_signature_len, 0);
+			xxy.signature = fri_signature;
+
+			char* buf_signature = new char[50]();
+			snprintf(buf_signature, 50, "the fri_gender is %s\n", fri_signature.c_str());
+			OutputDebugStringA(buf_signature);
+			delete[]buf_signature;
+
+
+			//Ìø×ªµ½ºÃÓÑĞÅÏ¢Õ¹Ê¾¿ò
+			DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_MYDIALOG_EIGHTEEN), NULL, Dialog_eighteen);
+
+			//½ÓÊÕ·şÎñÆ÷´¦Àí±êÖ¾
+			int x_len = 0;
+			recv(g_clientSocket, (char*)&x_len, sizeof(x_len), 0);
+			std::string x_str(x_len, '\0');
+			recv(g_clientSocket, &x_str[0], x_len, 0);
+
+			if (strcmp("success", x_str.c_str()) == 0)
+			{
+				MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦´¦ÀíÄúµÄ²é¿´ºÃÓÑÏûÏ¢µÄÇëÇó", L"QQ", MB_ICONINFORMATION);
+			}
+
+			EndDialog(hwndDlg, IDC_FRIEND_INFORMATION);
+			return (INT_PTR)TRUE;
+		}break;
+
+		case IDC_ADD_FRIEND://Ìí¼ÓºÃÓÑ
+		{
+			//Ïò·şÎñÆ÷·¢ËÍÌí¼ÓºÃÓÑµÄÇëÇó
+			std::string buf = "¿Í»§¶ËÇëÇóÌí¼ÓºÃÓÑ";
+			int buf_len = buf.size();
+			send(g_clientSocket, (char*)&buf_len, sizeof(buf_len), 0);
+			send(g_clientSocket,buf.c_str(),buf_len,0);
+
+
+			EndDialog(hwndDlg,IDC_ADD_FRIEND);
+			return (INT_PTR)TRUE;
+		}break;
+
+		case IDC_DELETE_FRIEND://É¾³ıºÃÓÑ
+		{
+			//Ïò·şÎñÆ÷·¢ËÍÍË³öÏûÏ¢
+			std::string s = "É¾³ıºÃÓÑ";
+			int s_l = s.size();
+			send(g_clientSocket, (char*)&s_l, sizeof(s_l), 0);
+			send(g_clientSocket, s.c_str(), s_l, 0);
+
+			HWND hList17 = GetDlgItem(hwndDlg,IDC_EDIT46);
+			int selIdx = (int)SendMessage(hList17, LB_GETCURSEL, 0, 0);
+
+			std::string& account = g_user_friends[selIdx].account;
+		    
+			//·¢ËÍÑ¡ÖĞÏîµÄÕËºÅ
+			int acc_len = account.size();
+			send(g_clientSocket,(char*)&acc_len,sizeof(acc_len),0);
+			send(g_clientSocket, account.c_str(), acc_len, 0);
+
+
+			//½ÓÊÕ·şÎñÆ÷´¦Àí±êÖ¾
+			int x_len = 0;
+			recv(g_clientSocket, (char*)&x_len, sizeof(x_len), 0);
+			std::string x_str(x_len,'\0');
+			recv(g_clientSocket, &x_str[0], x_len, 0);
+
+			if (strcmp("success", x_str.c_str()) == 0)
+			{
+				MessageBox(NULL,L"·şÎñÆ÷ÒÑ¾­³É¹¦´¦ÀíÄúµÄÉ¾³ıºÃÓÑµÄÇëÇó",L"QQ",MB_ICONINFORMATION);
+			}
+
+			EndDialog(hwndDlg, IDC_DELETE_FRIEND);
+			return (INT_PTR)TRUE;
+		}break;
+
+		case IDC_NEW_FRIEND://ĞÂÅóÓÑ
+		{
+			//Ïò·şÎñÆ÷·¢ËÍÍË³öÏûÏ¢
+			std::string s = "ĞÂÅóÓÑ";
+			int s_l = s.size();
+			send(g_clientSocket, (char*)&s_l, sizeof(s_l), 0);
+			send(g_clientSocket, s.c_str(), s_l, 0);
+
+			EndDialog(hwndDlg, IDC_NEW_FRIEND);
+			return (INT_PTR)TRUE;
+		}break;
+
+		case IDCANCEL://ÍË³ö
+		{
+			//Ïò·şÎñÆ÷·¢ËÍÍË³öÏûÏ¢
+			std::string s = "ÍË³ö";
+			int s_l = s.size();
+			send(g_clientSocket, (char*)&s_l, sizeof(s_l), 0);
+			send(g_clientSocket, s.c_str(), s_l, 0);
+
+			char* buf_102 = new char[50];
+			snprintf(buf_102, 50, "the s is %s\n",s.c_str());
+			OutputDebugStringA(buf_102);
+			delete[]buf_102;
+
+
+			EndDialog(hwndDlg, IDCANCEL);
+			return (INT_PTR)TRUE;
+		}break;
+
+		}
+	}
+
 	}
 	return (INT_PTR)FALSE;
+}
+
+int recv_all(SOCKET socket,char* buf, int buf_size, int signal = 0)
+{
+	int r = 0;
+	int sum = 0;
+	while (sum < buf_size)
+	{
+		int r = recv(socket, buf + sum, buf_size - sum, 0);//µ¥´Î½ÓÊÕÁ¿
+		if (r > 0)
+		{
+			sum += r;
+		}
+		if (sum == buf_size)
+		{
+			return sum;
+		}
+	}
+}
+
+void recv_personal_information_from_server()//½ÓÊÕÓÃ»§¸öÈËĞÅÏ¢
+{
+	//½ÓÊÕÃÜÂë
+	int password_len = 0;
+	int len1=recv_all(g_clientSocket, (char*)&password_len, sizeof(password_len), 0);
+	if (len1!= sizeof(password_len))
+	{
+		MessageBox(NULL, L"½ÓÊÕ¸öÈËĞÅÏ¢µÄÃÜÂë³¤¶ÈÊ§°Ü", L"QQ", MB_ICONERROR);
+		return;
+	}
+	std::string password_buf(password_len, '\0');
+	recv_all(g_clientSocket, &password_buf[0], password_len, 0);
+	old_my_user_information.password = password_buf;
+	//×ª»»Îª¿í×Ö·û´® 
+	int w_password_len = MultiByteToWideChar(CP_UTF8, 0, password_buf.c_str(), password_buf.size(), NULL, 0);
+	std::wstring w_password_str(w_password_len, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, password_buf.c_str(), password_buf.size(), &w_password_str[0], w_password_len);
+	w_old_my_user_information.password = w_password_str;
+
+	//½ÓÊÕêÇ³Æ
+	int nickname_len = 0;
+	int len2= recv_all(g_clientSocket, (char*)&nickname_len, sizeof(nickname_len), 0);
+	if (len2!= sizeof(nickname_len))
+	{
+		MessageBox(NULL, L"½ÓÊÕ¸öÈËĞÅÏ¢µÄêÇ³Æ³¤¶ÈÊ§°Ü", L"QQ", MB_ICONERROR);
+		return;
+	}
+	std::string nickname_buf(nickname_len, '\0');
+	recv_all(g_clientSocket, &nickname_buf[0], nickname_len, 0);
+	old_my_user_information.nickname = nickname_buf;
+	//×ª»»Îª¿í×Ö·û´® 
+	int w_nickname_len = MultiByteToWideChar(CP_UTF8, 0, nickname_buf.c_str(), nickname_buf.size(), NULL, 0);
+	std::wstring w_nickname_str(w_nickname_len, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, nickname_buf.c_str(), nickname_buf.size(), &w_nickname_str[0], w_nickname_len);
+	w_old_my_user_information.nickname = w_nickname_str;
+
+	//½ÓÊÕĞÔ±ğ
+	int gender_len = 0;
+	int len3= recv_all(g_clientSocket, (char*)&gender_len, sizeof(gender_len), 0);
+	if (len3!= sizeof(gender_len))
+	{
+		MessageBox(NULL, L"½ÓÊÕ¸öÈËĞÅÏ¢µÄĞÔ±ğ³¤¶ÈÊ§°Ü", L"QQ", MB_ICONERROR);
+		return;
+	}
+	std::string gender_buf(gender_len, '\0');
+	recv_all(g_clientSocket, &gender_buf[0], gender_len, 0);
+	old_my_user_information.gender = gender_buf;
+	//×ª»»Îª¿í×Ö·û´® 
+	int w_gender_len = MultiByteToWideChar(CP_UTF8, 0, gender_buf.c_str(), gender_buf.size(), NULL, 0);
+	std::wstring w_gender_str(w_gender_len, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, gender_buf.c_str(), gender_buf.size(), &w_gender_str[0], w_gender_len);
+	w_old_my_user_information.gender = w_gender_str;
+
+	//½ÓÊÕÄêÁä
+	int age_len = 0;
+	int len4 = recv_all(g_clientSocket, (char*)&age_len, sizeof(age_len), 0);
+	if (len4 != sizeof(age_len))
+	{
+		MessageBox(NULL, L"½ÓÊÕ¸öÈËĞÅÏ¢µÄÄêÁä³¤¶ÈÊ§°Ü", L"QQ", MB_ICONERROR);
+		return;
+	}
+	std::string age_buf(age_len, '\0');
+	recv_all(g_clientSocket, &age_buf[0], age_len, 0);
+	old_my_user_information.age = age_buf;
+	//×ª»»Îª¿í×Ö·û´® 
+	int w_age_len = MultiByteToWideChar(CP_UTF8, 0, age_buf.c_str(), age_buf.size(), NULL, 0);
+	std::wstring w_age_str(w_age_len, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, age_buf.c_str(), age_buf.size(), &w_age_str[0], w_age_len);
+	w_old_my_user_information.age = w_age_str;
+
+	//½ÓÊÕ¸öĞÔÇ©Ãû
+	int signature_len = 0;
+	int len5 = recv_all(g_clientSocket, (char*)&signature_len, sizeof(signature_len), 0);
+	if (len5 != sizeof(signature_len))
+	{
+		MessageBox(NULL, L"½ÓÊÕ¸öÈËĞÅÏ¢µÄ¸öĞÔÇ©Ãû³¤¶ÈÊ§°Ü", L"QQ", MB_ICONERROR);
+		return;
+	}
+	std::string signature_buf(signature_len, '\0');
+	recv_all(g_clientSocket, &signature_buf[0], signature_len, 0);
+	old_my_user_information.signature = signature_buf;
+	//×ª»»Îª¿í×Ö·û´® 
+	int w_signature_len = MultiByteToWideChar(CP_UTF8, 0, signature_buf.c_str(), signature_buf.size(), NULL, 0);
+	std::wstring w_signature_str(w_signature_len, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, signature_buf.c_str(), signature_buf.size(), &w_signature_str[0], w_signature_len);
+	w_old_my_user_information.signature= w_signature_str;
+	MessageBox(NULL, L"ÒÑ¾­³É¹¦½ÓÊÜËùÓĞÓÃ»§ĞÅÏ¢Êı¾İ", L"QQ", MB_ICONINFORMATION);
+}
+
+
+bool get_infor_from_id(HWND hwndDlg,int id,std::wstring &my_infor)//»ñÈ¡¿Ø¼şÄÚÈİ
+{
+	HWND hwndEdit = GetDlgItem(hwndDlg,id); // »ñÈ¡¿Ø¼ş¾ä±ú
+	int len = GetWindowTextLength(hwndEdit);        // »ñÈ¡ÎÄ±¾³¤¶È£¨²»º¬'\0'£©
+	if (len > 0)
+	{
+		my_infor.resize(len+1);           // Ô¤·ÖÅä¿Õ¼ä
+		GetWindowText(hwndEdit, &my_infor[0], len+1); // »ñÈ¡ÎÄ±¾ÄÚÈİ
+		if (!my_infor.empty()&&my_infor.back()=='\0')
+		{
+			my_infor.pop_back();
+			return true;
+		}
+	}
+	else
+	{
+		MessageBox(NULL, L"²»ÔÊĞíĞŞ¸ÄÄÚÈİÎª¿Õ", L"QQ", MB_ICONERROR);
+		return false;
+	}
+}
+
+bool get_infor_gender_from_id(HWND hwndDlg, int id, std::wstring& my_infor)//»ñÈ¡¿Ø¼şÄÚÈİ
+{
+	HWND hwndEdit = GetDlgItem(hwndDlg, id); // »ñÈ¡¿Ø¼ş¾ä±ú
+	int len = GetWindowTextLength(hwndEdit);        // »ñÈ¡ÎÄ±¾³¤¶È£¨²»º¬'\0'£©
+	if (len > 0)
+	{
+		my_infor.resize(len + 1);           // Ô¤·ÖÅä¿Õ¼ä
+		GetWindowText(hwndEdit, &my_infor[0], len + 1); // »ñÈ¡ÎÄ±¾ÄÚÈİ
+		if (!my_infor.empty() && my_infor.back() == '\0')
+		{
+			my_infor.pop_back();
+			if (!((wcscmp(my_infor.c_str(), L"ÄĞ") == 0) || (wcscmp(my_infor.c_str(), L"Å®") == 0)))
+			{
+				MessageBox(NULL, L"»ñÈ¡¿Ø¼şĞÔ±ğÊ§°Ü,Ö»ÄÜÊÇ¡¯ÄĞ¡® »ò¡¯Å®¡®", L"QQ", MB_ICONINFORMATION);
+				return false;
+			}
+			else
+			{
+				return true;
+			}
+		}
+	}
+	else
+	{
+		MessageBox(NULL, L"²»ÔÊĞíĞŞ¸ÄÄÚÈİÎª¿Õ", L"QQ", MB_ICONERROR);
+		return false;
+	}
+}
+
+void send_new_user_infor(SOCKET socket, std::wstring& w_str)//½«ÓÃ»§µÄĞÂĞÅÏ¢·¢³ö
+{
+	int new_password_len = WideCharToMultiByte(CP_UTF8, 0, w_str.c_str(), w_str.size(), NULL, 0, NULL, NULL);
+	std::string new_password_str(new_password_len, '\0');
+	WideCharToMultiByte(CP_UTF8, 0, w_str.c_str(), w_str.size(), &new_password_str[0], new_password_len, NULL, NULL);
+	send(g_clientSocket, (char*)&new_password_len, sizeof(new_password_len), 0);
+	send(g_clientSocket, new_password_str.c_str(), new_password_len, 0);
 }
 
 INT_PTR CALLBACK Dialog_fourteen(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)//µÇÂ¼ºó¸öÈËĞÅÏ¢¿ò//
@@ -1067,22 +3883,104 @@ INT_PTR CALLBACK Dialog_fourteen(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM 
 	switch (uMsg)
 	{
 	case WM_INITDIALOG:
+
+		recv_personal_information_from_server();//½ÓÊÕÓÃ»§¸öÈËÊı¾İ
+
 		SetDlgItemText(hwndDlg, IDC_EDIT31, L"ÕËºÅ");
 		SetDlgItemText(hwndDlg, IDC_EDIT32, L"ÃÜÂë");
 		SetDlgItemText(hwndDlg, IDC_EDIT33, L"êÇ³Æ");
 		SetDlgItemText(hwndDlg, IDC_EDIT34, L"ĞÔ±ğ");
 		SetDlgItemText(hwndDlg, IDC_EDIT35, L"ÄêÁä");
 		SetDlgItemText(hwndDlg, IDC_EDIT36, L"¸öĞÔÇ©Ãû");
-		return (INT_PTR)TRUE;
+		SetDlgItemText(hwndDlg, IDC_EDIT37,w_new_online_user_account.c_str());//ÕËºÅ
+
+		SetDlgItemText(hwndDlg, IDC_EDIT38,w_old_my_user_information.password.c_str());//ÃÜÂë
+		SetDlgItemText(hwndDlg, IDC_EDIT39, w_old_my_user_information.nickname.c_str());//êÇ³Æ
+		SetDlgItemText(hwndDlg, IDC_EDIT40, w_old_my_user_information.gender.c_str());//ĞÔ±ğ
+		SetDlgItemText(hwndDlg, IDC_EDIT41, w_old_my_user_information.age.c_str());//ÄêÁä
+		SetDlgItemText(hwndDlg, IDC_EDIT42, w_old_my_user_information.signature.c_str());//¸öĞÔÇ©Ãû
+        return (INT_PTR)TRUE;
+
 	case WM_COMMAND:
+
 		switch (LOWORD(wParam))
 		{
 		case IDOK:
-			EndDialog(hwndDlg, IDOK);
-			return (INT_PTR)TRUE;
+		{
+			
+			w_new_user_information my_user_new_information;
+			//»ñÈ¡ĞÂµÄÓÃ»§ĞÅÏ¢´æ´¢ÔÚmy_user_new_information½á¹¹Ìå
+			
+			if (!get_infor_from_id(hwndDlg, IDC_EDIT38, my_user_new_information.password))//»ñÈ¡¿Ø¼şÃÜÂë
+			{
+				MessageBox(NULL, L"»ñÈ¡¿Ø¼şÃÜÂëÊ§°Ü", L"QQ", MB_ICONINFORMATION);
+				return (INT_PTR)TRUE;
+			}
+			if (!get_infor_from_id(hwndDlg, IDC_EDIT39, my_user_new_information.nickname))//»ñÈ¡¿Ø¼şêÇ³Æ
+			{
+				MessageBox(NULL, L"»ñÈ¡¿Ø¼şÕËºÅÊ§°Ü", L"QQ", MB_ICONINFORMATION);
+				return (INT_PTR)TRUE;
+			}
+			if (!get_infor_gender_from_id(hwndDlg, IDC_EDIT40, my_user_new_information.gender))//»ñÈ¡¿Ø¼şĞÔ±ğ
+			{
+				//MessageBox(NULL, L"»ñÈ¡¿Ø¼şÃÜÂëÊ§°Ü£¬Ö»ÄÜÌî¡¯ÄĞ¡®»ò¡¯Å®¡®", L"QQ", MB_ICONINFORMATION);
+				return (INT_PTR)TRUE;
+			}
+			if (!get_infor_from_id(hwndDlg, IDC_EDIT41, my_user_new_information.age))//»ñÈ¡¿Ø¼şÄêÁä
+			{
+				MessageBox(NULL, L"»ñÈ¡¿Ø¼şÄêÁäÊ§°Ü", L"QQ", MB_ICONINFORMATION);
+				return (INT_PTR)TRUE;
+			}
+			if (!get_infor_from_id(hwndDlg, IDC_EDIT42, my_user_new_information.signature))//»ñÈ¡¿Ø¼ş¸öĞÔÇ©Ãû
+			{
+				MessageBox(NULL, L"»ñÈ¡¿Ø¼ş¸öĞÔÇ©ÃûÊ§°Ü", L"QQ", MB_ICONINFORMATION);
+				return (INT_PTR)TRUE;
+			}
+			//MessageBox(NULL, L"ÒÑ¾­³É¹¦»ñÈ¡ĞÂµÄ¸öÈËĞÅÏ¢", L"QQ", MB_ICONINFORMATION);
+
+			//Ïò·şÎñÆ÷·¢ËÍÈ·¶¨Ñ¡Ôñ
+			std::wstring my_sel = L"È·¶¨";
+			int utf8_my_sel = WideCharToMultiByte(CP_UTF8, 0, my_sel.c_str(), my_sel.size() + 1, NULL, 0, NULL, NULL);
+			std::string utf8_my_sel_str(utf8_my_sel, '\0');
+			WideCharToMultiByte(CP_UTF8, 0, my_sel.c_str(), my_sel.size() + 1, &utf8_my_sel_str[0], utf8_my_sel, NULL, NULL);
+			send(g_clientSocket, (char*)&utf8_my_sel, sizeof(utf8_my_sel), 0);
+			send(g_clientSocket, utf8_my_sel_str.c_str(), utf8_my_sel, 0);
+
+			//½«½á¹¹Ìåmy_user_new_informationÀï´æ´¢µÄÏûÏ¢·¢³ö
+			send_new_user_infor(g_clientSocket, my_user_new_information.password);//½«ÓÃ»§µÄĞÂÃÜÂë·¢³ö
+			send_new_user_infor(g_clientSocket, my_user_new_information.nickname);//½«ÓÃ»§µÄĞÂêÇ³Æ·¢³ö
+			send_new_user_infor(g_clientSocket, my_user_new_information.gender);//½«ÓÃ»§µÄĞÂĞÔ±ğ·¢³ö
+			send_new_user_infor(g_clientSocket, my_user_new_information.age);//½«ÓÃ»§µÄĞÂÄêÁä·¢³ö
+			send_new_user_infor(g_clientSocket, my_user_new_information.signature);//½«ÓÃ»§µÄĞÂ¸öĞÔÇ©Ãû·¢³ö
+			MessageBox(NULL, L"ÒÑ¾­³É¹¦½«¸öÈËĞÅÏ¢¸ü¸ÄµÄÇëÇó·¢Íù·şÎñÆ÷", L"QQ", MB_ICONINFORMATION);
+
+			int recv_len= 0;
+			recv(g_clientSocket,(char*)&recv_len,sizeof(recv_len),0);
+			std::string recv_str(recv_len,'\0');
+			recv(g_clientSocket,&recv_str[0],recv_len,0);
+			if (strcmp(recv_str.c_str(), "update_success") == 0)
+			{
+				MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦¸üĞÂÓÃ»§¸öÈËĞÅÏ¢", L"QQ", MB_ICONINFORMATION);
+				EndDialog(hwndDlg, IDOK);
+				return (INT_PTR)TRUE;
+			}
+			else
+			{
+				return (INT_PTR)TRUE;
+			}
+		}
 		case IDCANCEL:
+		{
+			//Ïò·şÎñÆ÷·¢ËÍÈ·¶¨Ñ¡Ôñ
+			std::wstring my_sel = L"È¡Ïû";
+			int utf8_my_sel = WideCharToMultiByte(CP_UTF8, 0, my_sel.c_str(), my_sel.size() + 1, NULL, 0, NULL, NULL);
+			std::string utf8_my_sel_str(utf8_my_sel, '\0');
+			WideCharToMultiByte(CP_UTF8, 0, my_sel.c_str(), my_sel.size() + 1, &utf8_my_sel_str[0], utf8_my_sel, NULL, NULL);
+			send(g_clientSocket, (char*)&utf8_my_sel, sizeof(utf8_my_sel), 0);
+			send(g_clientSocket, utf8_my_sel_str.c_str(), utf8_my_sel, 0);
 			EndDialog(hwndDlg, IDCANCEL);
 			return (INT_PTR)TRUE;
+		}
 		}
 	}
 	return (INT_PTR)FALSE;
@@ -1225,6 +4123,7 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int nCmdShow)//Winmain
 				if (result_three == IDOK) //ËÄ¼¶ÅĞ¶Ï//
 				{
 				door_two:
+					//Ã»½øÈëµÇÈëÊ×Ò³ÃæÇ°£¬¼ÓÔØÓÃ»§¸öÈËĞÅÏ¢
 					int result_ten = DialogBox(hinstance, MAKEINTRESOURCE(IDD_MYDIALOG_TEN), NULL, Dialog_ten);//µÇÂ½½çÃæÊ×Ò³¿ò//
 					int result_fifteen = 0;
 					int result_eleven = 0;
@@ -1238,45 +4137,180 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int nCmdShow)//Winmain
 						switch (result_twelve)
 						{
 						case IDOK:
-							MessageBox(NULL, L"»¹Î´¿ª·¢", L"QQ", MB_ICONINFORMATION);
+						{
+							//MessageBox(NULL, L"»¹Î´¿ª·¢", L"QQ", MB_ICONINFORMATION);
 							break;
+						}
 						case IDCANCEL:
 							goto door_two;//µÇÂ½½çÃæÊ×Ò³¿ò//
 							break;
-						}break;
+						}
+
+
 					case IDC_EDIT23:
+
+						door_11:
 						result_thirdteen = DialogBox(hinstance, MAKEINTRESOURCE(IDD_MYDIALOG_THIRDTEEN), NULL, Dialog_thirdteen);//ºÃÓÑ¿ò//
 						switch (result_thirdteen)
 						{
-						case IDOK:
-							MessageBox(NULL, L"»¹Î´¿ª·¢", L"QQ", MB_ICONINFORMATION);
+
+						case IDC_CHART://ÁÄÌì¿ò
+						{
+							//½øÈëºÃÓÑ¶Ô»°ÁÄÌì¿ò
+							int xx=DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_MYDIALOG_NINETEEN), NULL, Dialog_nineteen);//¸öÈËĞÅÏ¢¿ò//
+
+							switch (xx)
+							{
+
+							case IDCANCEL:
+							{
+								goto door_11;
+							}break;
+
+							}
 							break;
-						case IDCANCEL:
+						}
+
+						case IDCANCEL://ÍË³ö¿ò
+						{
 							goto door_two;//µÇÂ½½çÃæÊ×Ò³¿ò//
 							break;
+						}
+
+						case IDC_FRIEND_INFORMATION://²é¿´ºÃÓÑĞÅÏ¢¿ò
+						{
+							//·µ»ØºÃÓÑ¿ò
+							goto door_11;
+							break;
+						}
+
+						case IDC_ADD_FRIEND://Ìí¼ÓÅóÓÑ
+						{
+
+							INT_PTR result_20 = DialogBox(hinstance, MAKEINTRESOURCE(IDD_MYDIALOG_SIXTEEN), NULL, Dialog_sixteen);
+
+							switch (result_20)
+							{
+							case IDOK:
+							{
+								//·µ»ØºÃÓÑ¿òÊ×Ò³
+								MessageBox(NULL,L"¼´½«·µ»ØºÃÓÑÊ×Ò³¿ò",L"QQ",MB_ICONINFORMATION);
+
+								goto door_11;
+								break;
+							}
+							case IDCANCEL:
+							{
+								//·µ»ØºÃÓÑ¿òÊ×Ò³
+								MessageBox(NULL, L"¼´½«·µ»ØºÃÓÑÊ×Ò³¿ò", L"QQ",MB_ICONINFORMATION);
+
+								goto door_11;
+								break;
+							}
+							}
+
+							break;
+						}
+
+						case IDC_DELETE_FRIEND://É¾³ıÅóÓÑ
+						{
+							//·µ»ØºÃÓÑ¿òÊ×Ò³
+							MessageBox(NULL, L"ÒÑ¾­³É¹¦½«ÄúËùÑ¡ÔñµÄºÃÓÑÉ¾³ı", L"QQ", MB_ICONINFORMATION);
+							goto door_11;
+							break;
+						}
+
+						case IDC_NEW_FRIEND://ĞÂÅóÓÑ
+						{
+							//ÏÔÊ¾ĞÂÅóÓÑ¿ò
+							INT_PTR result_201 = DialogBox(hinstance, MAKEINTRESOURCE(IDD_MYDIALOG_SEVENTEEN), NULL, Dialog_seventeen);
+							switch (result_201)
+							{
+							case IDOK:
+							{
+								goto door_11;
+								break;
+							}
+							case IDC_REJECT:
+							{
+								goto door_11;
+								break;
+							}
+							case IDCANCEL:
+							{
+								//·µ»ØºÃÓÑ¿òÊ×Ò³
+								MessageBox(NULL, L"¼´½«·µ»ØºÃÓÑÊ×Ò³¿ò", L"QQ", MB_ICONINFORMATION);
+								goto door_11;
+								break;
+							}
+							}
+
+							break;
+						}
+
 						}break;
+
+
 					case IDC_EDIT24:
 						result_fourteen = DialogBox(hinstance, MAKEINTRESOURCE(IDD_MYDIALOG_FOURTEEN), NULL, Dialog_fourteen);//¸öÈËĞÅÏ¢¿ò//
 						switch (result_fourteen)
 						{
 						case IDOK:
-							MessageBox(NULL, L"»¹Î´¿ª·¢", L"QQ", MB_ICONINFORMATION);
+							//MessageBox(NULL, L"»¹Î´¿ª·¢", L"QQ", MB_ICONINFORMATION);
+							goto door_two;//µÇÂ½½çÃæÊ×Ò³¿ò//
 							break;
 						case IDCANCEL:
 							goto door_two;//µÇÂ½½çÃæÊ×Ò³¿ò//
 							break;
-						}break;
+						}
 					case IDC_EDIT25:
 						result_fifteen = DialogBox(hinstance, MAKEINTRESOURCE(IDD_MYDIALOG_EIGHT), NULL, Dialog_eight);//¸ü»»Í·Ïñ¿ò//
 						switch (result_fifteen)
 						{
 						case IDOK:
-							MessageBox(NULL, L"»¹Î´¿ª·¢", L"QQ", MB_ICONINFORMATION);
-							break;
-						case IDCANCEL:
+						{
+							//»ñÈ¡ĞÂµÄÍ·ÏñÊı¾İ²¢·¢ËÍ
+							int new_img_len = g_dwImageSize;
+							send(g_clientSocket, (char*)&new_img_len, sizeof(new_img_len), 0);
+							send(g_clientSocket, (char*)g_pImageData,new_img_len,0);
+							//½ÓÊÕÏûÏ¢£¬ÅĞ¶Ï¿Í»§¶ËÊÇ·ñÒÑ¾­³É¹¦¸üĞÂÓÃ»§Í·Ïñ
+							int user_new_img_len = 0;
+							int user_x=recv(g_clientSocket, (char*)&user_new_img_len,sizeof(user_new_img_len),0);
+							if (user_x != sizeof(user_new_img_len))
+							{
+								MessageBox(NULL,L"½ÓÊÕ·şÎñÆ÷·µ»ØµÄ¸üĞÂÍ·Ïñ³¤¶ÈÏûÏ¢Ê§°Ü",L"QQ",MB_ICONERROR);
+							}
+							else
+							{
+								MessageBox(NULL, L"½ÓÊÕ·şÎñÆ÷·µ»ØµÄ¸üĞÂÍ·ÏñÏûÏ¢³¤¶È³É¹¦", L"QQ", MB_ICONINFORMATION);
+							}
+							std::string user_new_img_str(user_new_img_len,'\0');
+							recv(g_clientSocket, &user_new_img_str[0], user_new_img_len, 0);
+							int my_wchar_len = 0;
+							my_wchar_len=MultiByteToWideChar(CP_UTF8,0,user_new_img_str.c_str(),user_new_img_str.size()+1,NULL,0);
+							std::wstring my_wchar_str(my_wchar_len,L'\0');
+							MultiByteToWideChar(CP_UTF8, 0, user_new_img_str.c_str(), user_new_img_str.size() + 1,&my_wchar_str[0],my_wchar_len);
+							if (!my_wchar_str.empty()&&my_wchar_str.back()==L'\0')
+							{
+								my_wchar_str.pop_back();
+							}
+							if (wcscmp(my_wchar_str.c_str(),L"·şÎñÆ÷ÒÑ¾­³É¹¦¸üĞÂÓÃ»§Í·Ïñ") == 0)
+							{
+								MessageBox(NULL, L"·şÎñÆ÷ÒÑ¾­³É¹¦¸üĞÂÓÃ»§Í·Ïñ", L"QQ", MB_ICONINFORMATION);
+							}
+							else
+							{
+								MessageBox(NULL, L"½ÓÊÕ·şÎñÆ÷·µ»ØµÄ¸üĞÂÍ·ÏñÏûÏ¢Ê§°Ü", L"QQ", MB_ICONINFORMATION);
+							}
 							goto door_two;//µÇÂ½½çÃæÊ×Ò³¿ò//
 							break;
-						}break;
+						}
+						case IDCANCEL:
+						{
+							goto door_two;//µÇÂ½½çÃæÊ×Ò³¿ò//
+							break;
+						}
+						}
 					case IDC_EDIT44:
 					{
 						int result_sixteen = DialogBox(hinstance, MAKEINTRESOURCE(IDD_MYDIALOG_FIFTEEN), NULL, Dialog_fifteen);//×¢ÏúÕËºÅ¿ò//
@@ -1296,12 +4330,12 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int nCmdShow)//Winmain
 						switch (result_eleven)
 						{
 						case IDOK:
-							MessageBox(NULL, L"»¹Î´¿ª·¢", L"QQ", MB_ICONINFORMATION);
+							//MessageBox(NULL, L"»¹Î´¿ª·¢", L"QQ", MB_ICONINFORMATION);
 							break;
 						case IDCANCEL:
 							goto door_two;//µÇÂ½½çÃæÊ×Ò³¿ò//
 							break;
-						}break;
+						}
 					case IDCANCEL:
 						DialogBox(hinstance, MAKEINTRESOURCE(IDD_MYDIALOG_END), NULL, Dialog_end);//ÍË³ö¿ò//
 						break;
@@ -1389,12 +4423,19 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int nCmdShow)//Winmain
 			}
 			else if (result_two == IDCANCEL)//ÍË³ö//   //Èı¼¶ÅĞ¶Ï//
 			{
+				std::wstring  wmsg = L"ÍË³ö";
+				int wlen = wmsg.size();
+				int utf8len = WideCharToMultiByte(CP_UTF8, 0, wmsg.c_str(), wlen + 1, NULL, 0, NULL, NULL);//¼ÆËãutf8_signlen×Ö½ÚÊı,º¬'\0'//
+				std::string msg(utf8len, 0);//·ÖÅä¿Õ¼ä//
+				WideCharToMultiByte(CP_UTF8, 0, wmsg.c_str(), wlen + 1, &msg[0], utf8len, NULL, NULL);//Êµ¼Ê×ª»»//
+				send(g_clientSocket, (char*)&utf8len, sizeof(utf8len), 0);//Ïò·şÎñÆ÷·¢ËÍĞÅÏ¢³¤¶È//
+				send(g_clientSocket, msg.c_str(), utf8len, 0);//Ïò·şÎñÆ÷·¢ËÍĞÅÏ¢ÄÚÈİ//
+				MessageBox(NULL, L"ÒÑÏò·şÎñÆ÷·¢ËÍÓÃ»§ÍË³ö¿Í»§¶ËĞÅÏ¢", L"QQ", MB_ICONINFORMATION);
 				DialogBox(hinstance, MAKEINTRESOURCE(IDD_MYDIALOG_END), NULL, Dialog_end);//ÍË³ö¿ò//
 			}
 		}
 	}
 	return 0;
 }
-
 
 
